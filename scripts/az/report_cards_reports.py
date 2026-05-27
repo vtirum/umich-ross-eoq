@@ -292,7 +292,7 @@ def main():
     with requests.Session() as session:
         fiscal_years = get_fiscal_years(session)
 
-        # fiscal years = [2025]
+        # fiscal years = [2024] # for testing
 
         print("Fiscal years:", fiscal_years)
 
