@@ -344,6 +344,98 @@ python scripts/fl/scrape.py
 
 Then review the generated manifests and failed download logs.
 
+## Specifying Specific Years
+
+Some scripts can be limited to specific fiscal years by editing the year list inside the script before running it.
+
+### Arizona Report Cards
+
+In:
+
+```text
+scripts/az/report_cards_reports.py
+```
+
+look for the fiscal year logic:
+
+```python
+fiscal_years = get_fiscal_years(session)
+```
+
+To run every available year, leave it as:
+
+```python
+fiscal_years = get_fiscal_years(session)
+```
+
+To run only selected years, replace it with a manual list:
+
+```python
+fiscal_years = [2025]
+```
+
+or:
+
+```python
+fiscal_years = [2023, 2024, 2025]
+```
+
+This is useful when testing the scraper or when collecting only the newest data.
+
+### Arizona Finance and Accountability Files
+
+For static Arizona files, the scripts download files linked on the public pages. These pages may contain multiple years of files. To limit years, either:
+
+1. edit the source page list to only include pages for the desired year, or
+2. filter downloaded links by filename text such as `2025`, `FY25`, or `FY2025`.
+
+Example filter:
+
+```python
+TARGET_YEARS = ["2025", "FY25", "FY 2025"]
+
+if not any(year in link for year in TARGET_YEARS):
+    continue
+```
+
+### Florida Files
+
+The Florida scraper downloads files from FLDOE public pages and archives. Many files include the year in the filename or link text.
+
+To limit Florida downloads to specific years, add a target year filter before downloading:
+
+```python
+TARGET_YEARS = ["2025", "2024"]
+
+combined = f"{item['link_text']} {item['url']}"
+
+if TARGET_YEARS and not any(year in combined for year in TARGET_YEARS):
+    continue
+```
+
+To download all available years, leave `TARGET_YEARS` empty:
+
+```python
+TARGET_YEARS = []
+```
+
+### Recommended Testing Approach
+
+Before running a full scrape, test with only one recent year:
+
+```python
+fiscal_years = [2025]
+```
+
+After confirming the script works, expand to multiple years:
+
+```python
+fiscal_years = [2023, 2024, 2025]
+```
+
+Then run all available years if needed.
+
+
 ## Scaling to 50 States
 
 To scale this project to all 50 states every year, the recommended approach is to make the scraper configuration-driven.
