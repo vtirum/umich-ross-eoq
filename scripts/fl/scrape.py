@@ -11,14 +11,37 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 SOURCE_PAGES = [
+    # Main data systems
     "https://www.fldoe.org/accountability/data-sys/",
     "https://www.fldoe.org/accountability/data-sys/edu-info-accountability-services/pk-12-public-school-data-pubs-reports/index.stml",
+
+    # PK-12 publications
     "https://www.fldoe.org/accountability/data-sys/edu-info-accountability-services/pk-12-public-school-data-pubs-reports/students.stml",
     "https://www.fldoe.org/accountability/data-sys/edu-info-accountability-services/pk-12-public-school-data-pubs-reports/staff.stml",
     "https://www.fldoe.org/accountability/data-sys/edu-info-accountability-services/pk-12-public-school-data-pubs-reports/school/index.stml",
     "https://www.fldoe.org/accountability/data-sys/edu-info-accountability-services/pk-12-public-school-data-pubs-reports/fl-data.stml",
     "https://www.fldoe.org/accountability/data-sys/edu-info-accountability-services/pk-12-public-school-data-pubs-reports/archive.stml",
+
+    # Assessments
+    "https://www.fldoe.org/accountability/assessments/k-12-student-assessment/results/",
+
+    # Finance
+    "https://www.fldoe.org/finance/fl-edu-finance-program-fefp/",
+
+    # Discipline
+    "https://www.fldoe.org/safe-schools/discipline-data.stml",
+
+    # School grades / accountability
+    "https://www.fldoe.org/accountability/accountability-reporting/school-grades/",
 ]
+
+ALLOWED_PREFIXES = (
+    "https://www.fldoe.org/accountability/data-sys/",
+    "https://www.fldoe.org/accountability/assessments/",
+    "https://www.fldoe.org/accountability/accountability-reporting/",
+    "https://www.fldoe.org/finance/",
+    "https://www.fldoe.org/safe-schools/",
+)
 
 OUT_DIR = Path("data/raw/fl/fldoe")
 MANIFEST_PATH = OUT_DIR / "fldoe_manifest.csv"
@@ -218,7 +241,7 @@ def main():
             continue
 
         if (
-            href.startswith("https://www.fldoe.org/accountability/data-sys/")
+            href.startswith(ALLOWED_PREFIXES )
             and not is_file_url(href)
             and href.endswith((".stml", "/"))
         ):
