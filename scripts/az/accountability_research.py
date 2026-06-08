@@ -1,164 +1,127 @@
-from playwright.sync_api import sync_playwright
+import sys
 from pathlib import Path
-from urllib.parse import urlparse, parse_qs, unquote
-import re
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from urllib.parse import urlparse
+
+import tqdm
+from playwright.sync_api import sync_playwright
+
+from common.file_utils import FILE_EXTS, safe_filename, sha256_file
+from common.manifest import write_csv
+from common.playwright_capture import new_browser_context, try_download_event, try_save_inline_response
+
+URL = "https://www.azed.gov/accountability-research/data"
+OUT_DIR = Path("data/raw/az/accountability_research")
+
+MANIFEST_FIELDS = ["source_page", "link_text", "file_url", "local_path", "status", "size_bytes", "sha256"]
+FAILED_FIELDS = ["source_page", "link_text", "file_url", "error"]
 
 
-url = "https://www.azed.gov/accountability-research/data"
-OUT_DIR = Path("downloads/az/accountability_research")
-OUT_DIR.mkdir(parents=True, exist_ok=True)
-FILE_EXTS = (".xlsx", ".xls", ".csv", ".pdf", ".zip", ".ppt", ".pptx")
+def main():
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
 
+    manifest = []
+    failed = []
 
-def filename_from_headers_or_url(response, link):
-    content_disposition = response.headers.get("content-disposition", "")
+    with sync_playwright() as p:
+        browser, context = new_browser_context(p)
+        page = context.new_page()
 
-    match = re.search(r'filename\*?=(?:UTF-8\'\')?"?([^";]+)"?', content_disposition)
-    if match:
-        return unquote(match.group(1)).replace("/", "_")
+        page.goto(URL, wait_until="networkidle", timeout=30000)
+        page.wait_for_timeout(5000)
 
-    parsed = urlparse(link)
-    name = Path(parsed.path).name
-
-    if name:
-        return unquote(name).replace("/", "_")
-
-    if "GetDocumentFile" in link:
-        qs = parse_qs(parsed.query)
-        doc_id = qs.get("id", ["unknown"])[0]
-        return f"GetDocumentFile_{doc_id}"
-
-    return "downloaded_file"
-
-
-def try_download_event(page, link):
-    page.evaluate(
-        """
-        url => {
-            const a = document.createElement("a");
-            a.href = url;
-            a.target = "_blank";
-            a.rel = "noopener";
-            a.textContent = "temp-download-link";
-            a.id = "temp-download-link";
-            document.body.appendChild(a);
-        }
-        """,
-        link
-    )
-    try: 
-        with page.expect_download(timeout=30000) as download_info:
-            page.click("#temp-download-link")
-
-        download = download_info.value
-        filename = download.suggested_filename
-        # filename = Path(urlparse(link).path).name
-        output_path = OUT_DIR / filename
-        download.save_as(output_path)
-
-        print(f"Saved: {output_path}")
-        return True
-    
-    except Exception as e:
-        print(f"Exception occurred while downloading {link}: {e}")
-        return False
-
-    finally:
-        page.evaluate(
-                """
-                () => {
-                    const link = document.getElementById("temp-download-link");
-                    if (link) {
-                        link.remove();
-                    }
-                }
-                """
-            )
-        
-        
-def try_save_file(context, link):
-    temp_page = context.new_page()
-    try: 
-        response = temp_page.goto(link, wait_until="networkidle", timeout=60000)
-        if response is None:
-            print(f"No response from {link}")
-            return False
-        
-        if not response.ok:
-            print(f"Failed to load {link}: {response.status} {response.status_text}")
-            return False
-        
-        content_type = response.headers.get("content-type", "").lower()
-        
-        if (
-            "pdf" in content_type
-            or "spreadsheet" in content_type
-            or "excel" in content_type
-            or "zip" in content_type
-            or "powerpoint" in content_type
-            or "octet-stream" in content_type
-            or link.lower().endswith(FILE_EXTS)
-            or "getdocumentfile" in link.lower()
-        ):
-            filename = filename_from_headers_or_url(response, link)
-            output_path = OUT_DIR / filename
-
-            output_path.write_bytes(response.body())
-            print(f"Saved by response body: {output_path}")
-
-            return True
-        
-        print(f"Skipped {link} - content type: {content_type}")
-        return False
-    
-    finally:
-        temp_page.close()
-
-
-
-with sync_playwright() as p:
-    browser = p.chromium.launch(headless=False)
-
-    context = browser.new_context(
-        accept_downloads=True,
-        user_agent=(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/120.0.0.0 Safari/537.36"
+        raw_links = page.eval_on_selector_all(
+            "a[href]",
+            "els => els.map(a => ({href: a.href, text: a.innerText.trim()}))",
         )
-    )
 
-    page = context.new_page()
-    #page = browser.new_page()
+        file_links = []
+        seen = set()
+        for item in raw_links:
+            href = item["href"]
+            if (href.lower().endswith(FILE_EXTS) or "GetDocumentFile" in href) and href not in seen:
+                file_links.append(item)
+                seen.add(href)
 
-    page.goto(url, wait_until="networkidle", timeout=60000)
-    page.wait_for_timeout(5000)
+        print(f"Found {len(file_links)} downloadable links")
 
-    # print(page.title())
-    # print(page.content()[:2000])
+        for item in tqdm.tqdm(file_links, desc="Downloading"):
+            url = item["href"]
+            text = item["text"]
 
-    links = page.eval_on_selector_all(
-        "a[href]",
-        "els => els.map(a => a.href)"
-    )
+            filename = safe_filename(Path(urlparse(url).path).name or text or url)
+            dest = OUT_DIR / filename
 
-    file_links = []
+            if dest.exists() and dest.stat().st_size > 0:
+                manifest.append({
+                    "source_page": URL,
+                    "link_text": text,
+                    "file_url": url,
+                    "local_path": str(dest),
+                    "status": "skipped_existing",
+                    "size_bytes": dest.stat().st_size,
+                    "sha256": sha256_file(dest),
+                })
+                continue
 
-    for link in links:
-        if link.lower().endswith(FILE_EXTS) or "GetDocumentFile" in link:
-            file_links.append(link)
-            print(link)
-    print(f"Found {len(file_links)} file links")    
+            try:
+                output_path, method = try_download_event(page, url, OUT_DIR)
+                if output_path is None:
+                    output_path, method = try_save_inline_response(context, url, OUT_DIR)
 
-    for link in file_links:
-        try: 
-            downloaded = try_download_event(page, link)
-            if not downloaded:
-                try_save_file(context, link)
-            
-        except Exception as e:
-            print(f"Exception occurred while downloading {link}: {e}")
-    
-    browser.close()
+                if output_path and output_path.exists():
+                    manifest.append({
+                        "source_page": URL,
+                        "link_text": text,
+                        "file_url": url,
+                        "local_path": str(output_path),
+                        "status": f"downloaded:{method}",
+                        "size_bytes": output_path.stat().st_size,
+                        "sha256": sha256_file(output_path),
+                    })
+                else:
+                    manifest.append({
+                        "source_page": URL,
+                        "link_text": text,
+                        "file_url": url,
+                        "local_path": "",
+                        "status": f"failed:{method}",
+                        "size_bytes": "",
+                        "sha256": "",
+                    })
+                    failed.append({
+                        "source_page": URL,
+                        "link_text": text,
+                        "file_url": url,
+                        "error": method,
+                    })
 
-    
+            except Exception as e:
+                tqdm.tqdm.write(f"FAILED {url}: {e}")
+                manifest.append({
+                    "source_page": URL,
+                    "link_text": text,
+                    "file_url": url,
+                    "local_path": "",
+                    "status": "exception",
+                    "size_bytes": "",
+                    "sha256": "",
+                })
+                failed.append({
+                    "source_page": URL,
+                    "link_text": text,
+                    "file_url": url,
+                    "error": repr(e),
+                })
+
+        browser.close()
+
+    write_csv(OUT_DIR / "manifest.csv", manifest, MANIFEST_FIELDS)
+    write_csv(OUT_DIR / "failed.csv", failed, FAILED_FIELDS)
+    print(f"\nDone. {len(manifest)} files tracked, {len(failed)} failed.")
+
+
+if __name__ == "__main__":
+    main()
