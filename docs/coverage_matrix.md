@@ -96,8 +96,10 @@ established AZ/FL pattern.
 
 ### Massachusetts (DESE) — STATIC
 - Profiles: `https://profiles.doe.mass.edu/` (per-entity report exports)
-- Statewide reports: `https://www.doe.mass.edu/infoservices/reports/`
+- Statewide reports: `https://www.doe.mass.edu/infoservices/reports/` — DONE
+  (165 files, 70 MB; see "Massachusetts InfoServices — gap-fill" below)
 - Dataset directory: `https://www.mass.gov/info-details/dese-directory-of-datasets-and-reports`
+- PowerBI accountability dashboard (app.powerbigov.us) — reviewed, deferred
 
 ### New York (NYSED) — STATIC (best ROI)
 - Downloads: `https://data.nysed.gov/downloads.php`
@@ -118,3 +120,103 @@ established AZ/FL pattern.
 - K-12 data files: `https://www.mischooldata.org/k-12-data-files/`
 - Historical assessment: `https://www.mischooldata.org/historical-assessment-data-files/`
 - Financial summary: `https://www.mischooldata.org/financial-summary`
+
+---
+
+## Gap-fill additions (post-collection)
+
+After a per-state audit of the 5 required categories (assessment, financial,
+enrollment, discipline/suspension, teacher), two cross-cutting fills were added:
+
+### CRDC — federal discipline fill (all states)
+`scripts/crdc/download.py` downloads the U.S. DOE Civil Rights Data Collection
+national public-use files (2015-16, 2017-18, 2020-21; 2021-22 opt-in at 832 MB)
+and extracts per-state discipline CSVs (Suspensions, Expulsions, Restraint &
+Seclusion, Referrals/Arrests, Corporal Punishment) into
+`data/raw/<ST>/discipline_crdc/` for all 10 assigned states. This fills the
+discipline gap for **AZ, GA, PA, FL** (which don't publish scrapable state
+discipline data) and supplements the rest. The national zips also contain
+enrollment and teacher/staff FTE — useful supplementary coverage for the
+dashboard-gated states (MI, NV).
+
+### California financial
+`scripts/ca/download.py` was extended to crawl the CDE `/ds/fd/` tree (SACS
+annual financial data, Current Expense of Education / per-pupil spending, J-90
+certificated salaries) in addition to `/ds/ad/`. CA now covers all 5 categories.
+
+### Nevada non-assessment — SOLVED via doe.nv.gov
+The Report Card portal's non-assessment builder resisted automation, but the
+Nevada DOE website (`doe.nv.gov`, a headless CMS) publishes the data as plain
+Excel downloads on topic pages. `scripts/nv/doe_download.py` (Playwright crawl of
+the ADAM "Data & Reports" hub + topic pages) collected 84 files: enrollment
+(per-year student counts 2016-2026), financial (NRS 387-388A statewide reports
+FY20-24 + chart of accounts), staff, special education, CTE. Combined with the
+SBAC/ACT API data and CRDC discipline, NV now covers all five categories.
+
+### Michigan dashboard — partially solved
+`scripts/mi/dashboard_scrape.py` (Playwright) cracked the "current data" tools
+on mischooldata.org: they're thin Umbraco wrappers around an iframe to a legacy
+ASP.NET WebForms app (`legacy.mischooldata.org/DistrictSchoolProfiles2/...`),
+which renders results as tab-separated tables in the page text once
+`Common_SchoolYear`/`Common_Locations`/etc. query-string params are supplied
+(no Cloudflare challenge actually blocks these). Collected **Statewide, all
+years**: enrollment counts (24 years, 2002-03 to 2025-26, in
+`data/raw/mi/dashboard/enrollment_counts_statewide.csv`), graduation/dropout
+rates (4/5/6-year cohort rates, `graddropout_statewide.csv`), and M-STEP
+grades 3-8 ELA/Math performance (9 years x 6 grades x 2 subjects,
+`assessment_mstep_statewide.csv`). One known minor anomaly: the 2024-25
+Grade08/ELA query returned an MSS Science row instead of ELA — not root-caused.
+
+ISD-level (33 ISDs) and district/school-level breakdowns were **not solved** —
+the `Common_Locations` parameter uses internal hierarchy codes for sub-state
+entities that weren't reverse-engineered (statewide = `1-A,0,0,0~2-A,0,0,0`;
+the obvious `1-I,<isd_id>,0,0` guess returned no data). The staffing/educator
+dashboard tool (`staffing-count`) also returned empty result grids regardless
+of parameters tried — not solved. District/school-level MI coverage still
+comes from the static files + CRDC.
+
+### Massachusetts InfoServices — gap-fill
+`scripts/ma/infoservices_download.py` covers `doe.mass.edu/infoservices/reports/`,
+a static bulk-Excel archive separate from `profiles.doe.mass.edu/statereport`
+(already covered by `scripts/ma/download.py`). Downloaded **165 files, 70 MB**
+to `data/raw/ma/infoservices/`: regular enrollment by district/grade (2017-2026,
+44 MB), special-education enrollment (2017-2026), CVTE enrollment (2016-17 to
+2021-22), attendance by grade/student-group mid-year + end-of-year (25 MB),
+bullying allegations (SY23-SY25), in-grade retention (Appendix A/B), postsecondary
+(IHE) enrollment outcomes, and a statewide graduation-rate trend file. All 165
+downloads succeeded (no errors). This adds attendance, retention, and
+postsecondary-outcomes categories not previously covered for MA, plus richer
+enrollment breakdowns (sped/CVTE).
+
+The MA PowerBI "School and District Performance Summary" accountability
+dashboard (app.powerbigov.us) was reviewed but deferred — would require
+Power-BI query-capture reverse-engineering similar to the GA Insights gap-fill;
+not started, no immediate need given the infoservices + statereport coverage.
+
+### Known remaining gaps (documented, not solved)
+- **FL financial (FEFP) + detailed staff** — `www.fldoe.org` is Akamai-blocked
+  (403 Access Denied even via stealth browser; harder than CA's Radware). FL has
+  assessment/enrollment/graduation via the report-card API + edudata, and
+  discipline via CRDC, but the FEFP finance and detailed staff static files are
+  unreachable from this network. Retry later or use an FLDOE data request.
+- **MI ISD/district/school dashboard breakdowns + staffing dashboard tool** —
+  see "Michigan dashboard" above; static files + CRDC cover district/school level.
+- **NV secondary categories** — current enrollment/finance/teacher behind
+  interactive dashboards (NV report-builder). CRDC supplies discipline
+  (+ some enrollment/staff).
+
+### Financial — gap fills completed (all 10 states now covered)
+- **California** — added `/ds/fd/` crawl (Current Expense of Education / per-pupil) to scripts/ca/download.py.
+- **Michigan** — added `financial-data-files/` (FID revenue & expenditure, 68 files) to scripts/mi/download.py.
+- **Nevada** — NRS 387-388A statewide financial reports via scripts/nv/doe_download.py.
+- **Florida (FEFP host Akamai-blocked)** — filled via the federal Census/NCES **F-33**
+  district finance survey: `scripts/census_f33/download.py` downloads the national
+  individual-unit files (FY2018-2022) and filters per-state district revenue+expenditure
+  into data/raw/<ST>/finance_f33/ (FL = all 67 districts/year). Also provides a
+  cross-state finance dataset for every assigned state.
+
+**Result: all 10 states now cover all 5 required categories** (assessment,
+financial, enrollment, discipline/suspension, teacher/staff) — verified by content,
+not just file presence. State-published data is used where reachable; CRDC
+(discipline/enrollment/staff) and F-33 (finance) federal datasets fill the
+otherwise-blocked or dashboard-gated gaps (FL finance, MI/NV secondary categories).

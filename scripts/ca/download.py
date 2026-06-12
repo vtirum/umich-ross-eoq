@@ -41,6 +41,7 @@ from common.manifest import write_csv
 
 # Hub pages — the per-domain downloadable-data landing pages.
 SEED_PAGES = [
+    # /ds/ad/ — enrollment, assessment, staff, grad/dropout, discipline, EL, FRPM
     "https://www.cde.ca.gov/ds/ad/downloadabledata.asp",
     "https://www.cde.ca.gov/ds/ad/enrolldowndata.asp",
     "https://www.cde.ca.gov/ds/ad/assessmentdata.asp",
@@ -49,15 +50,22 @@ SEED_PAGES = [
     "https://www.cde.ca.gov/ds/ad/discipline.asp",
     "https://www.cde.ca.gov/ds/ad/eldf.asp",
     "https://www.cde.ca.gov/ds/ad/filessp.asp",
+    # /ds/fd/ — financial: SACS annual financial data, current expense of education
+    # & per-pupil spending, certificated salaries & benefits (J-90)
+    "https://www.cde.ca.gov/ds/fd/",
+    "https://www.cde.ca.gov/ds/fd/fd/index.asp",
+    "https://www.cde.ca.gov/ds/fd/ec/index.asp",
+    "https://www.cde.ca.gov/ds/fd/cs/index.asp",
 ]
 
-PAGE_PREFIX = "https://www.cde.ca.gov/ds/ad/"
+# Pages under either the /ds/ad/ or /ds/fd/ tree are followed during the crawl.
+PAGE_PREFIX = ("https://www.cde.ca.gov/ds/ad/", "https://www.cde.ca.gov/ds/fd/")
 FILE_HOST_HINT = "demo-downloads"
 OUT_DIR = Path("data/raw/ca")
 MANIFEST_PATH = OUT_DIR / "manifest.csv"
 FILE_EXTS = (".txt", ".csv", ".xlsx", ".xls", ".zip")
 
-MAX_PAGES = 80           # safety cap on pages crawled
+MAX_PAGES = 160           # safety cap on pages crawled
 CA_LIST_ONLY = os.environ.get("CA_LIST_ONLY", "0") not in ("0", "false", "no", "")
 MIN_YEAR = int(os.environ.get("CA_MIN_YEAR", "2019"))
 

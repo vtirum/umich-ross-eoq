@@ -32,10 +32,29 @@ from common.file_utils import safe_filename, sha256_file
 from common.http_client import make_session
 from common.manifest import write_csv
 
+# All 15 mischooldata.org "*-data-files" pages (discovered by crawling the site
+# navigation). Each links Excel/zip files on the michigan.gov CDN (/-/media/).
 SEED_PAGES = [
     "https://www.mischooldata.org/k-12-data-files/",
     "https://www.mischooldata.org/historical-assessment-data-files/",
     "https://www.mischooldata.org/college-data-files/",
+    # Financial Information Database (FID) — district revenue & expenditure
+    "https://www.mischooldata.org/financial-data-files/",
+    # Enrollment / pupil counts (the core gap)
+    "https://www.mischooldata.org/student-enrollment-counts-data-files7/",
+    "https://www.mischooldata.org/district-fte-pupil-counts-data-files/",
+    "https://www.mischooldata.org/econdis-counts-data-files/",
+    "https://www.mischooldata.org/homeless-enrollment-data-files/",
+    "https://www.mischooldata.org/migrant-enrollment-data-files/",
+    "https://www.mischooldata.org/nonpublic-student-counts-data-files/",
+    "https://www.mischooldata.org/special-education-counts-data-files/",
+    "https://www.mischooldata.org/special-education-counts-1-data-files/",
+    # Staff / educator (teacher gap)
+    "https://www.mischooldata.org/additional-staffing-data-files/",
+    # Graduation / dropout
+    "https://www.mischooldata.org/graddropout-rates-data-files/",
+    # District/school directory
+    "https://www.mischooldata.org/districtschool-data-files/",
 ]
 
 OUT_DIR = Path("data/raw/mi")
@@ -57,19 +76,30 @@ MANIFEST_FIELDS = [
 
 def _category(url, label):
     s = f"{url} {label}".lower()
-    if "assessment" in s or "meap" in s or "mme" in s or "m-step" in s or "mstep" in s or "sat" in s:
+    if "financ" in s or "expenditure" in s or "revenue" in s or "fid" in s or "fiscal" in s:
+        return "finance"
+    if "staffing" in s or "educator" in s or "teacher" in s or "staff" in s:
+        return "educator"
+    if "assessment" in s or "meap" in s or "mme" in s or "m-step" in s or "mstep" in s \
+            or "psat" in s or "wida" in s or ("sat" in s and "satisf" not in s):
         return "assessment"
-    if "enroll" in s or "count" in s:
-        return "enrollment"
     if "grad" in s or "dropout" in s:
         return "graduation"
-    if "educator" in s or "teacher" in s or "staff" in s:
-        return "educator"
-    if "financ" in s or "expenditure" in s or "revenue" in s:
-        return "finance"
-    if "disciplin" in s:
+    if "disciplin" in s or "suspension" in s:
         return "discipline"
-    if "layout" in s or "catalog" in s or "guide" in s or "reference" in s:
+    if "special education" in s or "special-education" in s or "sped" in s:
+        return "special_education"
+    if "homeless" in s:
+        return "enrollment_homeless"
+    if "migrant" in s:
+        return "enrollment_migrant"
+    if "econdis" in s or "economically" in s:
+        return "enrollment_econdis"
+    if "nonpublic" in s:
+        return "enrollment_nonpublic"
+    if "enroll" in s or "count" in s or "fte" in s or "pupil" in s or "membership" in s:
+        return "enrollment"
+    if "layout" in s or "catalog" in s or "guide" in s or "reference" in s or "directory" in s:
         return "reference"
     if "college" in s or "postsecondary" in s:
         return "postsecondary"
