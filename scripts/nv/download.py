@@ -53,12 +53,22 @@ HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh) AppleWebKit/537.36 Chrome/120.
 
 SBAC_GRADES = [f"g{g}" for g in range(3, 9)]
 
-# Each dataset: code, score field list, and whether it is grade-spanned.
+# Each dataset: code, score field list, grades.
+# Exam codes and score fields discovered by capturing network traffic from
+# nevadareportcard.nv.gov/di/main/assessment via Playwright.
 DATASETS = [
     {"name": "assessment_sbac", "code": "e24", "grades": SBAC_GRADES,
-     "scores": "MA_level,MA_pass,MA_SS,N_MA,RD_level,RD_pass,RD_SS,N_RD"},
-    {"name": "assessment_act", "code": "e25", "grades": [],
-     "scores": "AC_SS,N_AC,N_MA,MA_SS,N_EN,EN_SS,N_RD,RD_SS,N_SC,SC_SS,N_WR,WR_SS"},
+     "scores": "N_MA,N_RD,N_SC,MA_NotTested,RD_NotTested,MA_Tested,RD_Tested,MA_pass,RD_pass,SC_pass,MA_level,RD_level,SC_level"},
+    {"name": "assessment_ccr_grade11", "code": "e25", "grades": [],
+     "scores": "N_MA,N_ELA,MA_NotTested,ELA_NotTested,MA_Tested,ELA_Tested,MA_Pass,ELA_Pass,MA_level,ELA_level"},
+    {"name": "assessment_science_5_8", "code": "e30", "grades": [],
+     "scores": "N_SC,SC_NotTested,SC_Tested,SC_pass,SC_level"},
+    {"name": "assessment_science_9_10", "code": "e29", "grades": [],
+     "scores": "N,SC_NotTested,SC_Tested,pass,level"},
+    {"name": "assessment_naa", "code": "e31", "grades": [],
+     "scores": "MA_EA,RD_EA,SC_EA,MA_level,RD_level,SC_level"},
+    {"name": "assessment_elpa", "code": "e39", "grades": [],
+     "scores": "N_Compo,Compo_Tested,Compo_NotTested,Compo_Pro,CO"},
 ]
 
 # DEFERRED — non-assessment datasets. The NV API's summaryCSV requires

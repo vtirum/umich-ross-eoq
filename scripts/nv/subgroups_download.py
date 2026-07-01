@@ -49,13 +49,37 @@ DATASETS = [
         "name": "assessment_sbac_subgroups",
         "code": "e24",
         "grades": [f"g{g}" for g in range(3, 9)],
-        "scores": "MA_level,MA_pass,MA_SS,N_MA,RD_level,RD_pass,RD_SS,N_RD",
+        "scores": "N_MA,N_RD,N_SC,MA_NotTested,RD_NotTested,MA_Tested,RD_Tested,MA_pass,RD_pass,SC_pass,MA_level,RD_level,SC_level",
     },
     {
-        "name": "assessment_act_subgroups",
+        "name": "assessment_ccr_grade11_subgroups",
         "code": "e25",
         "grades": [],
-        "scores": "AC_SS,N_AC,MA_SS,N_MA,EN_SS,N_EN,RD_SS,N_RD,SC_SS,N_SC",
+        "scores": "N_MA,N_ELA,MA_NotTested,ELA_NotTested,MA_Tested,ELA_Tested,MA_Pass,ELA_Pass,MA_level,ELA_level",
+    },
+    {
+        "name": "assessment_science_5_8_subgroups",
+        "code": "e30",
+        "grades": [],
+        "scores": "N_SC,SC_NotTested,SC_Tested,SC_pass,SC_level",
+    },
+    {
+        "name": "assessment_science_9_10_subgroups",
+        "code": "e29",
+        "grades": [],
+        "scores": "N,SC_NotTested,SC_Tested,pass,level",
+    },
+    {
+        "name": "assessment_naa_subgroups",
+        "code": "e31",
+        "grades": [],
+        "scores": "MA_EA,RD_EA,SC_EA,MA_level,RD_level,SC_level",
+    },
+    {
+        "name": "assessment_elpa_subgroups",
+        "code": "e39",
+        "grades": [],
+        "scores": "N_Compo,Compo_Tested,Compo_NotTested,Compo_Pro,CO",
     },
 ]
 

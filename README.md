@@ -127,8 +127,10 @@ python scripts/ut/opendata_download.py    # Utah Open Data (opendata.utah.gov) U
 
 ### Nevada
 ```bash
-python scripts/nv/download.py            # NV Report Card API (SBAC + ACT assessment, All Students)
-python scripts/nv/subgroups_download.py  # SBAC + ACT by race/ethnicity, gender, IEP, EL, FRL
+python scripts/nv/download.py            # NV Report Card API — 6 assessments (All Students):
+                                         #   SBAC ELA/Math 3-8, CCR Grade 11, Science 5/8,
+                                         #   Science 9/10, NAA (alternate), ELPA
+python scripts/nv/subgroups_download.py  # same 6 assessments by race/ethnicity, gender, IEP, EL, FRL
 python scripts/nv/reportcard_full.py     # extended NV report card categories
 python scripts/nv/doe_download.py        # doe.nv.gov topic pages (enrollment, finance, staff, CTE)
 ```
