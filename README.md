@@ -8,8 +8,8 @@ Automated collection of publicly available K-12 education data across 10 states.
 |---|---|---|
 | **Arizona** | AZ Report Cards API, ADE accountability pages, finance portal | API + Static + Browser |
 | **Florida** | edudata.fldoe.org (Tableau API), FL Report Cards API, FLDOE static | API + Dashboard |
-| **California** | cde.ca.gov bulk downloads, CAASPP assessment files | Static (stealth browser for captcha) |
-| **Utah** | schools.utah.gov/datastatistics/reports.php | Static |
+| **California** | cde.ca.gov bulk downloads, CAASPP assessment files, DataSF/Oakland Open Data | Static (stealth browser for captcha) + Socrata API |
+| **Utah** | schools.utah.gov/datastatistics/reports.php, Utah Open Data | Static + Socrata API |
 | **Nevada** | nevadareportcard.nv.gov API (assessment), doe.nv.gov topic pages | API + Static |
 | **Massachusetts** | profiles.doe.mass.edu (ASP.NET postback), doe.mass.edu/infoservices | Static (form replication) |
 | **New York** | data.nysed.gov (MS Access DB per year) | Static |
@@ -114,25 +114,29 @@ python scripts/fl/edudata_export.py   # Tableau/edudata API
 
 ### California
 ```bash
-python scripts/ca/download.py            # bulk CDE data files (assessment, enrollment, staff, finance)
-python scripts/ca/assessment_download.py # CAASPP/ELPAC statewide assessment research files
+python scripts/ca/download.py               # bulk CDE data files (assessment, enrollment, staff, finance, school directory)
+python scripts/ca/assessment_download.py    # CAASPP/ELPAC statewide assessment research files
+python scripts/ca/local_portals_download.py # DataSF + Oakland Open Data (Tier-L local portals)
 ```
 
 ### Utah
 ```bash
-python scripts/ut/download.py   # USBE reports page bulk Excel/PDF downloads
+python scripts/ut/download.py             # USBE reports page bulk Excel/PDF downloads
+python scripts/ut/opendata_download.py    # Utah Open Data (opendata.utah.gov) USBE-owned datasets
 ```
 
 ### Nevada
 ```bash
-python scripts/nv/download.py         # NV Report Card API (SBAC + ACT assessment)
-python scripts/nv/reportcard_full.py  # extended NV report card categories
-python scripts/nv/doe_download.py     # doe.nv.gov topic pages (enrollment, finance, staff, CTE)
+python scripts/nv/download.py            # NV Report Card API (SBAC + ACT assessment, All Students)
+python scripts/nv/subgroups_download.py  # SBAC + ACT by race/ethnicity, gender, IEP, EL, FRL
+python scripts/nv/reportcard_full.py     # extended NV report card categories
+python scripts/nv/doe_download.py        # doe.nv.gov topic pages (enrollment, finance, staff, CTE)
 ```
 
 ### Massachusetts
 ```bash
 python scripts/ma/download.py                  # profiles.doe.mass.edu statewide reports (ASP.NET postback)
+python scripts/ma/mcas_subgroups.py            # MCAS by race/ethnicity, gender, IEP, EL (ASP.NET postback)
 python scripts/ma/infoservices_download.py     # doe.mass.edu/infoservices bulk Excel archive
 ```
 `MA_MIN_YEAR` environment variable controls the earliest year pulled (default: 2019):
@@ -207,6 +211,9 @@ Georgia's DOE Insights is a Power BI dashboard backed by Azure blob storage. Met
 
 ### 7. Federal dataset substitution
 When state sources are blocked (Florida finance: Akamai WAF; MI/NV interactive dashboards: JS-gated), federal datasets fill the gap: CRDC (discipline, enrollment, staff) and Census F-33 (district finance) cover all 50 states and are freely downloadable.
+
+### 8. Socrata catalog API
+City/state open-data portals built on Socrata (DataSF, Oakland Open Data, Utah Open Data) expose a catalog search API (`/api/catalog/v1`) to discover dataset IDs and a direct CSV export per dataset (`/resource/<id>.csv`) — no scraping needed. Used for `scripts/ca/local_portals_download.py` and `scripts/ut/opendata_download.py`. Some catalog entries are Socrata "story" assets (narrative dashboard pages) rather than downloadable tables and must be filtered out.
 
 ## Known Limitations and Gaps
 
