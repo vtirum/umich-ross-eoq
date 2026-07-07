@@ -108,8 +108,10 @@ python scripts/az/finance_dynamic_download.py  # dynamic finance portal (Playwri
 ### Florida
 ```bash
 python scripts/fl/scrape.py            # static FLDOE data pages
-python scripts/fl/report_cards.py     # FL report cards API
-python scripts/fl/edudata_export.py   # Tableau/edudata API
+python scripts/fl/report_cards.py      # FL report cards API (includes GetTGELA: assessment by gender/race/IEP/ELL)
+python scripts/fl/edudata_export.py    # Tableau/edudata API
+python scripts/fl/fldoe_download.py    # fldoe.org bulk files via Wayback Machine proxy (bypasses Akamai WAF):
+                                       #   attendance, enrollment, staff, graduation, 2025 FAST assessments
 ```
 
 ### California
