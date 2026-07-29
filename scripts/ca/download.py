@@ -56,10 +56,13 @@ SEED_PAGES = [
     "https://www.cde.ca.gov/ds/fd/fd/index.asp",
     "https://www.cde.ca.gov/ds/fd/ec/index.asp",
     "https://www.cde.ca.gov/ds/fd/cs/index.asp",
+    # /ds/si/ — school directory / public schools & districts data files (school records)
+    "https://www.cde.ca.gov/ds/si/ds/pubschls.asp",
+    "https://www.cde.ca.gov/ds/si/ps/",
 ]
 
-# Pages under either the /ds/ad/ or /ds/fd/ tree are followed during the crawl.
-PAGE_PREFIX = ("https://www.cde.ca.gov/ds/ad/", "https://www.cde.ca.gov/ds/fd/")
+# Pages under either the /ds/ad/, /ds/fd/, or /ds/si/ tree are followed during the crawl.
+PAGE_PREFIX = ("https://www.cde.ca.gov/ds/ad/", "https://www.cde.ca.gov/ds/fd/", "https://www.cde.ca.gov/ds/si/")
 FILE_HOST_HINT = "demo-downloads"
 OUT_DIR = Path("data/raw/ca")
 MANIFEST_PATH = OUT_DIR / "manifest.csv"
@@ -84,11 +87,14 @@ MANIFEST_FIELDS = [
 
 def _category(url):
     """Domain is encoded in the demo-downloads path, e.g. /demo-downloads/census/..."""
-    parts = urlparse(url).path.lower().split("/")
+    path = urlparse(url).path.lower()
+    parts = path.split("/")
     if "demo-downloads" in parts:
         i = parts.index("demo-downloads")
         if i + 1 < len(parts):
             return parts[i + 1]
+    if "/ds/si/ps/" in path:
+        return "private_school_directory"
     return "other"
 
 
