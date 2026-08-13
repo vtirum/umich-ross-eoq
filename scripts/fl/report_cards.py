@@ -34,7 +34,6 @@ Outputs to data/raw/fl/report_cards/
 
 import sys
 import json
-import re
 import threading
 import time
 import random

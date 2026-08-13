@@ -1,31 +1,20 @@
 """
-common/verify_dims.py — verify demographic breakdowns by reading the files themselves
+Detect demographic breakdowns by reading the files themselves.
 
-The LLM labeller (common/llm_assist.py) guesses demographic dimensions from a file's
-TITLE. That is useful for triage but it over-claims: Missouri's "APR Summary by
-Districts" was tagged race|gender|iep_504|ell|frl and actually contains only
-accountability points. Titles are not evidence.
+llm_assist guesses dimensions from a file's title, which over- and (more often)
+under-claims: measured against contents it missed 154 Indiana and 43 Missouri
+files that genuinely carry breakdowns. This opens each file instead and looks for
+race, gender, iep_504, ell and frl in the header row and a sample of values,
+covering both layouts states use (one column per subgroup, or a "Student Group"
+column whose values are the subgroups).
 
-For files already on disk we can do better than guessing — open them and look. This
-reads each spreadsheet/CSV's header row plus a sample of values and reports which
-demographic dimensions are ACTUALLY present:
+Writes <manifest>_verified.csv with verified_dims and dims_source (header /
+values / both / none / unreadable / skipped_format).
 
-    race     Hispanic/Black/White/Asian/American Indian/Two or More/ethnicity
-    gender   Male/Female/sex
-    iep_504  IEP/504/special education/students with disabilities
-    ell      EL/ELL/LEP/English learner
-    frl      free/reduced-price meals/lunch, economically disadvantaged
+Legacy .xls needs xlrd; openpyxl cannot read it, and before that fallback existed
+46 New Mexico files were reported as unreadable.
 
-Detection covers both layouts state agencies use: wide (one column per subgroup)
-and long (a "Student Group"/"Category" column whose VALUES are the subgroups).
-
-Writes `<manifest>_verified.csv` with columns:
-    verified_dims   dimensions found in the file (pipe-separated)
-    dims_source     header | values | both | none | unreadable
-
-Run:
     python scripts/common/verify_dims.py data/raw/mo/mcds/manifest_llm.csv
-    python scripts/common/verify_dims.py data/raw/in/manifest_llm.csv --limit 200
 """
 
 import argparse
@@ -91,6 +80,26 @@ def _read_xlsx(path):
     return header, values
 
 
+def _read_xls_legacy(path):
+    """Read a legacy BIFF .xls via xlrd (openpyxl only handles OOXML)."""
+    import xlrd
+    header, values = [], []
+    bk = xlrd.open_workbook(path, on_demand=True)
+    try:
+        for sn in bk.sheet_names()[:4]:
+            sh = bk.sheet_by_name(sn)
+            for i in range(min(sh.nrows, MAX_ROWS)):
+                cells = [str(c) for c in sh.row_values(i) if str(c).strip()]
+                if i < 6 and len(cells) > 2 and not header:
+                    header = cells
+                values.extend(cells[:40])
+                if len(values) > MAX_ROWS * 4:
+                    break
+    finally:
+        bk.release_resources()
+    return header, values
+
+
 def _read_csvlike(path, delim=None):
     header, values = [], []
     with open(path, "r", encoding="utf-8", errors="replace") as f:
@@ -121,9 +130,14 @@ def inspect(path):
             header, values = _read_csvlike(p)
         elif suf == ".xls":
             try:
-                header, values = _read_xlsx(p)   # often xlsx mislabelled
-            except (zipfile.BadZipFile, KeyError):
-                return set(), "unreadable"
+                header, values = _read_xlsx(p)   # sometimes an xlsx mislabelled .xls
+            except (zipfile.BadZipFile, KeyError, Exception):
+                # genuine legacy BIFF — openpyxl cannot read it (46 NM files landed
+                # here as "unreadable" before this fallback existed)
+                try:
+                    header, values = _read_xls_legacy(p)
+                except Exception:
+                    return set(), "unreadable"
         else:
             return set(), "skipped_format"
     except Exception:

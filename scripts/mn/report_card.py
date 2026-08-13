@@ -1,45 +1,25 @@
 """
-mn/report_card.py — Minnesota Report Card (rc.education.mn.gov) WebFOCUS API
+Minnesota Report Card API (rc.education.mn.gov).
 
-Minnesota publishes school/district data through the Minnesota Report Card, a
-single-page app backed by a WebFOCUS reporting server. There is no bulk file
-download; data is served per organization as JSON from:
+MDE publishes school and district data through a WebFOCUS backend. There is no
+bulk file; data comes per organisation as JSON:
 
-    https://rc.education.mn.gov/ibi_apps/WFServlet
-        ?IBIAPP_app=rptcard_reports
-        &IBIF_ex=rptcard_getdata_<report>
-        &orgName=<name>&orgId=<id>&groupType=state|district|school
-        &year=<YYYY>[&report-specific params]
+    WFServlet?IBIAPP_app=rptcard_reports&IBIF_ex=rptcard_getdata_<report>
+             &orgId=<id>&groupType=state|district|school&year=<YYYY>
 
-Each response bundles the requested year's detail plus a multi-year trend, so one
-call per org per report captures recent history. The statewide org is 999999000000.
+Statewide org is 999999000000; org lists come from getfilter_orglist.fex. Each
+reply carries a five-year trend, so one call per org per report covers recent
+history. Plain requests works - this host is not bot-gated.
 
-This script pulls the reports that resolve from just (org, year) — covering
-assessment (North Star achievement/progress, MN Growth, NAEP), enrollment
-(demographics), graduation, staffing, finance (fiscal transparency), plus English
-learners, college-going, early childhood, HS courses, and well-rounded education.
+Covers 16 reports resolvable from (org, year): North Star achievement/progress,
+MN Growth, NAEP, demographics, graduation, staffing, fiscal transparency,
+college-going, English learners, early childhood, HS courses, well-rounded.
 
-Not yet included (need extra dimensional params / form interaction; tracked as
-follow-ups): detailed MCA-by-test/subject/grade (stateassessments), ACCESS by
-test/grade, and the discipline sub-reports (suspensions/expulsions/violence/
-referrals). Discipline is covered for MN by the federal CRDC pull (scripts/crdc).
+Not wired: the discipline sub-reports and detailed MCA by test/subject/grade need
+extra dimensional parameters. Discipline for MN comes from CRDC.
 
-The MDE Analytics site (pub.education.mn.gov) is a separate, Perfdrive/hCaptcha-
-gated WebFOCUS shell and is not used here — the Report Card API is the clean
-structured source. rc.education.mn.gov itself is not bot-gated.
-
-Output:  data/raw/mn/report_card/<report>__<groupType>.jsonl   (one org per line)
-Manifest: data/raw/mn/report_card/manifest.csv
-
-Run:
-    python scripts/mn/report_card.py
-Environment:
-    MN_YEAR=2024          analysis year to request (default 2024 = last fully-published
-                          year, covers every report; a 5-year trend is embedded in each
-                          response regardless. Use MN_YEAR=2025 for reports already
-                          reporting 2024-25, e.g. graduation/demographics/northstar.)
-    MN_LEVELS=state,district,school   which org levels to pull (default all three)
-    MN_REPORTS=graduation,demographics,...   restrict to specific reports (default all)
+Output:   data/raw/mn/report_card/<report>__<groupType>.jsonl
+Env:      MN_YEAR=2024, MN_LEVELS=state,district,school, MN_REPORTS=graduation,...
 """
 
 import sys

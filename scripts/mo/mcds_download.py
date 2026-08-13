@@ -1,34 +1,24 @@
 """
-mo/mcds_download.py — Missouri MCDS bulk data files (apps.dese.mo.gov/MCDS)
+Missouri MCDS bulk files (apps.dese.mo.gov/MCDS).
 
-Missouri's public education data lives in the Missouri Comprehensive Data System
-(MCDS) portal. Each dataset is a direct statewide bulk file served by a download
-handler:
+Every dataset is a direct FileDownloadWebHandler.ashx link. The category pages
+render those links in JavaScript, so a browser harvests them and requests does the
+downloading; the handler itself is not gated and supplies real filenames via
+Content-Disposition.
 
-    https://apps.dese.mo.gov/MCDS/FileDownloadWebHandler.ashx?filename=<hash><name>.xlsx
+Categories 0-7 exist but only 2/3/4/5 are distinct - 0, 1, 6 and 7 return the same
+default set.
 
-The category pages (home.aspx?categoryid=N&view=2) render their file lists in
-JavaScript, so we harvest the links with a browser, then download each file with
-plain requests (the handler itself is not bot-gated and sets a Content-Disposition
-filename). Covers all five categories: assessment (MAP results by content area/
-grade, disaggregated by subgroup; statewide score distributions), enrollment
-(district/building enrollment + demographics back to 1991, attendance), finance
-(per-pupil expenditures, ASBR summaries), staff (faculty, certification, student-
-staff ratios), graduation (adjusted cohort rate, dropout, follow-up), and
-discipline (building/district incidents, Part B).
+Covers MAP results by content area and grade including subgroup breakdowns,
+enrollment and demographics back to 1991, per-pupil expenditures, ASBR finance,
+faculty and certification, cohort graduation, and discipline incidents.
 
-Not included: the MCDS "SSRS" report-viewer reports (SSRS_Print.aspx?Reportid=...)
-and the interactive Visualizations dashboards — those are per-district parameterized
-report tools, not bulk files (tracked as a follow-up).
+Not usable: SSRS_Print.aspx reports are per-district parameter forms and ignore
+SSRS's rs:Format export parameters. The statewide bulk files already hold that
+data.
 
-Output:  data/raw/mo/mcds/<category>/<filename>
-Manifest: data/raw/mo/mcds/manifest.csv
-
-Run:
-    python scripts/mo/mcds_download.py
-Environment:
-    HEADLESS=1        run the link-harvest browser without a window (recommended)
-    MO_CATEGORIES=0,1,2,3,4,5,6,7   category ids to crawl (default 0-7, deduped)
+Output:   data/raw/mo/mcds/<category>/<filename>
+Env:      MO_CATEGORIES=0,1,2,3,4,5,6,7
 """
 
 import sys

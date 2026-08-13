@@ -1,26 +1,21 @@
 """
-common/llm_assist.py — local LLM helpers (Ollama) for data-file discovery
+Local-LLM helpers (Ollama) for labelling data files.
 
-Keyword rules mis-file a lot of state DOE data: our Missouri crawl put 54% of files
-in "other" ("Missouri School Statistics", "Free and Reduced Price Lunch Percentage
-by Building", ...). A small local model reads the human-written link text and does
-much better, and it can also flag which files carry demographic breakdowns
-(race / gender / IEP-504 / EL) — the thing we specifically care about.
+Keyword rules mis-file a lot of state DOE data. 
+A small local model reads the human-written link text and does much better.
 
-Runs entirely locally against Ollama (no API keys, no data leaves the machine):
-    ollama serve                # usually already running
-    ollama pull qwen2.5:14b     # default model
+    ollama serve
+    ollama pull qwen2.5:14b        # or set LLM_MODEL
 
-Two helpers:
-  classify_files(items)  -> category + demographic dimensions per file label
-  rank_pages(links)      -> which page links are worth crawling for bulk data
+classify_files()  category + demographic dimensions per file label
+rank_pages()      which page links are worth crawling for bulk data
 
-Both batch their inputs (one model call per ~25 items) and cache results to
-data/cache/llm/*.json keyed by a hash of the prompt, so re-runs are free.
+Both batch their input (one call per ~25 items) and cache to data/cache/llm, so
+re-runs are free. Link extraction stays deterministic; the model only labels and
+prioritises, and its output is constrained to a fixed category set.
 
-This is an assist, not an oracle: link extraction stays deterministic
-(BeautifulSoup), the model only labels and prioritizes. Categories are constrained
-to a fixed set and anything unparseable falls back to the keyword result.
+Caveat: dimensions guessed from a title are unreliable in both directions. Use
+verify_dims.py for anything that matters.
 """
 
 import hashlib

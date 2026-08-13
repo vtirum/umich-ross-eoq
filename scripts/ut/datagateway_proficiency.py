@@ -1,41 +1,21 @@
 """
-ut/datagateway_proficiency.py — Utah RISE/UA Plus/DLM proficiency BY DEMOGRAPHIC GROUP
+Utah proficiency by demographic group, including gender (USBE Data Gateway).
 
-Closes the Utah "assessments by gender" gap. Utah's static reports
-(schools.utah.gov/datastatistics/reports) publish proficiency broken out by
-race, disability, and ELL — but NOT by gender. The public USBE Data Gateway
-"Student Proficiency Results" dashboard does: its demographic table includes
-Female / Male alongside race, Economically Disadvantaged, LEP, Students with
-Disabilities, and Mobile.
+Utah's static reports (ut/download.py) break proficiency out by race, disability
+and ELL but never by gender. The public Data Gateway dashboard does, so this fills
+that gap.
 
-That dashboard is a Tableau Cloud view embedded via the Tableau Embedding API v3
-with a Connected-App JWT the datagateway page mints. We can't hit the Tableau
-server directly (no JWT), but we CAN load the public page in a browser — which
-authenticates the embed automatically — and then read the underlying worksheet
-data through the in-page Embedding API (`getSummaryDataAsync`). That is the
-official, supported extraction path.
+It is a Tableau Cloud view embedded with a Connected-App JWT the page mints, so we
+cannot call Tableau directly. Loading the public page authenticates the embed, and
+from there the official Embedding API v3 gives us the underlying worksheet
+(getSummaryDataAsync) and lets us step through years (applyFilterAsync). The year
+in the URL is ignored; the filter is what matters.
 
-Granularity: the demographic breakdown is STATE-level only (toggling "Show LEA"
-does not add LEA rows to the categories worksheet). So this delivers, per school
-year and per subject (Language Arts / Mathematics / Science):
-  - % proficient for each demographic Category (incl. Male / Female)
-  - the All-Students baseline + masked student counts
+State level only - toggling "Show LEA" does not add LEA rows to the categories
+worksheet, so there is no district or school gender data published anywhere.
 
-Years: the URL year segment is ignored (every route defaults to the latest year).
-The year is a categorical filter on the worksheet, so we load the page once and
-iterate school years via applyFilterAsync("School Year", ["2021-2022"], replace).
-
-Output: data/raw/ut/assessment_gender_datagateway/
-  proficiency_by_category_<schoolyear>.csv   (one per year)
-  proficiency_by_category_all_years.csv      (combined)
-Manifest: data/raw/ut/assessment_gender_datagateway/manifest.csv
-
-Run:
-    python scripts/ut/datagateway_proficiency.py
-Environment:
-    HEADLESS=1            run without a visible browser (recommended)
-    UT_DG_YEARS=2016-2025 inclusive spring-year range to attempt (default 2016-2025);
-                          years with no data on the dashboard are skipped automatically
+Output:   data/raw/ut/assessment_gender_datagateway/proficiency_by_category_<year>.csv
+Env:      UT_DG_YEARS=2016-2025, HEADLESS=1
 """
 
 import sys

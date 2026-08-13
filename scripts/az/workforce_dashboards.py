@@ -1,46 +1,28 @@
 """
-az/workforce_dashboards.py — Arizona educator/teacher workforce data (Power BI)
+Arizona educator workforce data (ADE Power BI dashboards).
 
-Closes the Arizona "bulk staff records" gap as far as ADE publishes it. ADE does
-NOT release a downloadable teacher/staff file (SDER is PDFs; OACIS is per-educator
-lookup only). Its one bulk, demographic teacher-workforce source is the public
-Power BI "ADE Workforce Data Dashboards" (self-reported via the Teacher Input
-Application, TIA), embedded at azed.gov/teach/ade-workforce-data-dashboards.
+ADE publishes no downloadable staff file - SDER is PDFs and OACIS is a
+per-educator lookup - so its only bulk demographic teacher data is the public
+Workforce dashboards, self-reported through the Teacher Input Application.
 
-Two public reports:
-  Educator Dashboard (3 pages)
-    - Degree & Years of Experience (education level, experience buckets + trends)
-    - Content & Grade Level (subject taught, grade band)
-    - Race & Gender (race + gender distributions + trends 2020-2026)
-  Comparison of Students vs Teachers - Ethnicity Makeup (student vs teacher race)
+Two reports: the Educator Dashboard (degree and experience, content and grade
+level, race and gender, with 2020-2026 trends) and a student-vs-teacher ethnicity
+comparison.
 
-How the extraction works: a Power BI "view" embed renders its visuals by POSTing
-to <region>.analysis.windows.net/public/reports/querydata and getting back the
-compressed "DSR" result. We load the embed in a browser, nudge it so every visual
-issues its query, capture each querydata response, and decode the DSR into tidy
-rows. Column names come from the response's descriptor.Select. We save one CSV per
-visual plus the raw JSON payloads as an audit trail.
+Extraction uses the shared Power BI capture in common/powerbi.py: load the embed,
+nudge it until every visual issues its querydata request, decode the DSR.
 
-Granularity: TIA state-level aggregates. Distribution visuals reflect the report's
-default year; the trend visuals carry the full 2020-2026 year dimension. (School-
-level teacher counts by race/sex/experience are covered separately by CRDC.)
+Granularity is TIA state-level aggregates; distribution visuals show the report's
+default year while trend visuals carry the full year dimension. School-level staff
+by race and sex comes from CRDC.
 
-Output: data/raw/az/workforce/<report>/<visual>.csv
-        data/raw/az/workforce/<report>/_raw/<visual>.json
-Manifest: data/raw/az/workforce/manifest.csv
-
-Run:
-    python scripts/az/workforce_dashboards.py
-Environment:
-    HEADLESS=1   run without a visible browser (recommended)
+Output:   data/raw/az/workforce/<report>/<visual>.csv (+ _raw/<visual>.json)
+Env:      HEADLESS=1
 """
 
 import sys
-import os
-import re
 import csv
 import json
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -48,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from playwright.sync_api import sync_playwright
 
 from common.playwright_capture import new_browser_context, is_headless
-from common.file_utils import safe_filename, sha256_file
+from common.file_utils import sha256_file
 from common.manifest import write_csv
 
 OUT_DIR = Path("data/raw/az/workforce")

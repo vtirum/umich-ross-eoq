@@ -1,21 +1,15 @@
 """
-common/powerbi.py — extract data from public Power BI "view" embeds
+Extract data from public Power BI "view" embeds.
 
-Some agencies publish data only inside an embedded Power BI report (Arizona's ADE
-Workforce dashboards, Indiana's EdData Form 9 finance). Those reports render by
-POSTing to <region>.analysis.windows.net/public/reports/querydata and receiving a
-compressed "DSR" payload. We load the embed in a browser, nudge it so every visual
-issues its query, capture each querydata response, and decode the DSR into rows.
+Some agencies publish only inside an embedded report (Arizona's ADE Workforce
+dashboards, Indiana's EdData). Those render by POSTing to
+<region>.analysis.windows.net/public/reports/querydata and receiving a compressed
+DSR payload. We load the embed, nudge it so every visual issues its query,
+capture the responses and decode them.
 
-DSR shapes handled:
-  - inline C-arrays with R (repeat-previous) and O/Ø (null) bitmasks
-  - ValueDicts dictionary-encoded values
-  - named-key rows (G0/M0 as object keys)
-  - nested X/SH matrices (trend charts: one row per primary axis value, with an X
-    array of per-series measures and series labels in SH)
-
-Column names come from the response's descriptor.Select. Shared by
-scripts/az/workforce_dashboards.py and scripts/in/eddata_dashboards.py.
+Handles the DSR shapes seen in practice: inline C-arrays with R (repeat) and O
+(null) bitmasks, ValueDicts encoding, named-key rows, and the nested X/SH matrices
+trend charts use. Column names come from descriptor.Select.
 """
 
 import re

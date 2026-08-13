@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import tqdm
 from bs4 import BeautifulSoup
 
-from common.file_utils import FILE_EXTS, safe_filename, sha256_file
+from common.file_utils import safe_filename, sha256_file
 from common.http_client import make_session
 from common.manifest import write_csv
 

@@ -40,7 +40,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import requests
-import tqdm
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
 from common.manifest import write_csv

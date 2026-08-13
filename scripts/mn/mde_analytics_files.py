@@ -1,37 +1,23 @@
 """
-mn/mde_analytics_files.py — MDE Analytics bulk data files (pub.education.mn.gov)
+Minnesota MDE Analytics bulk files (pub.education.mn.gov/MDEAnalytics).
 
-The MDE Analytics portal (pub.education.mn.gov/MDEAnalytics/Data.jsp) has ~59 data
-topics. They come in two flavors:
+The Data Reports and Analytics portal has 59 topics at DataTopic.jsp?TOPICID=N.
+Most are report runners behind PerimeterX, but the ones that matter are file
+listers: choose test/year/subject/grade, press "List files", and get direct
+download links. That distinction is the whole trick - the portal looks like a
+dashboard and behaves like a static file index.
 
-  1. FILE-LISTING topics (e.g. "Assessment Files", TOPICID=1) — dropdown filters
-     plus a "List files" button that renders a table of downloadable files. The
-     files themselves are served from education.mn.gov's content server:
-         https://education.mn.gov/mdeprod/idcplg?IdcService=GET_FILE
-             &RevisionSelectionMethod=latestReleased&Rendition=primary&dDocName=<ID>
-     That host is NOT bot-protected, so files download with plain requests.
-  2. REPORT-RUNNER topics — interactive WebFOCUS reports (Run Report/Download).
-     pub.education.mn.gov guards those with PerimeterX; not handled here.
+Assessment files span 1998-2025 (MCA, MTAS, Alt-MCA, MOD, GRAD, BST, ACCESS,
+TEAE, MTELL, SOLOM, WIDA), each with State/County/District/School sheets and
+Group Category + Student Group columns covering race, gender, special education,
+English proficiency, economic status, homeless, migrant, military and SLIFE.
 
-This script covers flavor 1. The "List files" form POSTs to WFServlet.ibfs and
-renders results in a nested iframe; we replicate that POST directly (with the
-listing page as Referer) and parse the resulting HTML table, capturing each file's
-metadata columns (e.g. Test Name / Year / Public-Nonpublic / Subject / Grade) plus
-its download link, then fetch every file.
+Blocked: the report-runner topics (discipline, UFARS finance) trigger a
+PerimeterX challenge on "Run Report" and never generate. Use CRDC and Census F-33
+for those.
 
-Assessment Files alone yields ~600 files, 1998-2025: MCA, MTAS, Alt-MCA, MOD, GRAD,
-BST, ACCESS / Alternate ACCESS, TEAE, MTELL, SOLOM, WIDA — at state, county,
-district and school level, disaggregated by student group (race/ethnicity, gender,
-special education, English learner, free/reduced-price meals) subject to MDE's
-small-N privacy suppression.
-
-Output:  data/raw/mn/mde_analytics/<topic>/<filename>
-Manifest: data/raw/mn/mde_analytics/manifest.csv
-
-Run:
-    python scripts/mn/mde_analytics_files.py
-Environment:
-    MN_TOPICS=1,4,133   restrict to specific TOPICIDs (default: all known file-listing topics)
+Output:   data/raw/mn/mde_analytics/<topic>/<filename>
+Env:      MN_TOPICS=1,545,87,2,4,450,588
 """
 
 import sys
@@ -44,11 +30,9 @@ from urllib.parse import unquote
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import tqdm
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 from bs4 import BeautifulSoup
 
+from common.http_client import BROWSER_UA, make_session
 from common.file_utils import safe_filename, sha256_file
 from common.manifest import write_csv
 
@@ -57,11 +41,7 @@ WFSERVLET = f"{BASE}/ibi_apps/WFServlet.ibfs"
 OUT_DIR = Path("data/raw/mn/mde_analytics")
 MANIFEST_PATH = OUT_DIR / "manifest.csv"
 
-HEADERS = {
-    "User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-                   "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"),
-    "Accept-Language": "en-US,en;q=0.9",
-}
+HEADERS = {"User-Agent": BROWSER_UA}
 
 # TOPICIDs that use the "List files" interface. Names become output subfolders.
 FILE_TOPICS = [
@@ -83,17 +63,6 @@ TOPIC_FILTER = {int(x) for x in os.environ.get("MN_TOPICS", "").replace(" ", "")
 
 MANIFEST_FIELDS = ["state", "topic", "label", "meta", "fmt", "file_url",
                    "local_path", "status", "size_bytes", "sha256"]
-
-
-def make_session():
-    s = requests.Session()
-    retry = Retry(total=2, connect=2, read=2, backoff_factor=0.5,
-                  status_forcelist=[429, 500, 502, 503, 504], raise_on_status=False)
-    ad = HTTPAdapter(max_retries=retry, pool_connections=4, pool_maxsize=4)
-    s.mount("https://", ad)
-    s.mount("http://", ad)
-    s.headers.update(HEADERS)
-    return s
 
 
 def _list_files(session, topic_id):

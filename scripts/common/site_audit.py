@@ -1,23 +1,16 @@
 """
-common/site_audit.py — LLM-guided audit of a state DOE site for missed data files
+Sweep a state DOE site for bulk data files we never collected.
 
-Purpose: after a state has been scraped, sweep its DOE site for bulk data files we
-never collected. Deterministic crawl + local-LLM prioritisation:
+Crawls seed pages, extracts every file link, diffs against an existing manifest
+and reports only what is new. Nothing is downloaded here; feed the output to
+fetch_candidates.py.
 
-  1. crawl seed pages, extract every link (BeautifulSoup)
-  2. ask the local model which page links look like they lead to bulk data
-     (score 3/2 => follow, up to --depth), so we don't blind-crawl the whole site
-  3. collect every downloadable file link found (.xlsx/.xls/.csv/.zip/.txt/.tab/.pdf
-     plus known handler URLs)
-  4. ask the model to categorise each file and flag demographic breakdowns
-  5. diff against an existing manifest and report only what is NEW
+Page links are filtered by keyword first. Pass --no-rank on link-heavy sites:
+LLM-ranking every link on an archive page costs far more than it adds.
 
-Output: a CSV of candidate-new files (nothing is downloaded here).
-
-Run:
-    python scripts/common/site_audit.py --state in \\
-        --seeds https://www.in.gov/doe/it/ https://www.in.gov/doe/it/data-center-and-reports/ \\
-        --manifest data/raw/in/manifest.csv --out data/raw/in/audit_candidates.csv
+    python scripts/common/site_audit.py --state in --no-rank --depth 2 \
+        --seeds <urls...> --manifest data/raw/in/manifest.csv \
+        --out data/raw/in/audit_candidates.csv
 """
 
 import argparse

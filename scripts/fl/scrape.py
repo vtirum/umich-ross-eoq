@@ -11,7 +11,7 @@ import tqdm
 import requests
 from bs4 import BeautifulSoup
 
-from common.file_utils import FILE_EXTS, safe_filename, sha256_file, is_file_url
+from common.file_utils import safe_filename, sha256_file, is_file_url
 from common.http_client import make_session
 from common.manifest import write_csv
 

@@ -1,33 +1,17 @@
 """
-in/eddata_dashboards.py — Indiana EdData dashboards (Power BI)
+Indiana EdData dashboards (Power BI) - NOT WORKING, kept for reference.
 
-The IDOE Data Center publishes bulk files for assessment, enrollment, graduation and
-staff, but its FINANCE data is not a file: Form 9 (revenue, expenditure and cash
-balances for every school corporation and charter) lives only in the EdData portal
-as an embedded Power BI report. Attendance/enrollment and 3rd-grade-reading also
-have dashboards there with detail beyond the static files.
+IDOE publishes Form 9 finance (revenue, expenditure and cash balances per
+corporation and charter) only as an embedded Power BI report. Unlike Arizona's
+app.powerbi.com embeds, EdData uses the Power BI Government cloud
+(app.powerbigov.us, querydata on analysis.usgovcloudapi.net), and the embed
+renders only inside its wrapper page - loading the iframe URL directly gives a
+spinner.
 
-eddata.doe.in.gov serves these with powerbigov.min.js — the same Power BI embed
-technology as Arizona's ADE Workforce dashboards — so we reuse the shared DSR
-capture/decoder in scripts/common/powerbi.py.
-
-One wrinkle vs Arizona: EdData does not expose an app.powerbi.com "view" URL. Each
-report page wraps a cross-origin <iframe> pointing at **app.powerbigov.us**
-(Power BI Government cloud), whose querydata calls go to
-*.analysis.usgovcloudapi.net. The iframe src is generated per page load, so we load
-the wrapper first, read the iframe's src, then drive that embed directly.
-
-Reports are addressed by UUID:
-    https://eddata.doe.in.gov/PublicHome/GetObjectByUuidAndViewType
-        ?uuid=<UUID>&viewType=Report&currentPage=1
-
-Output: data/raw/in/eddata/<report>/<visual>.csv  (+ _raw/<visual>.json)
-Manifest: data/raw/in/eddata/manifest.csv
-
-Run:
-    python scripts/in/eddata_dashboards.py
-Environment:
-    HEADLESS=1   run without a visible browser (recommended)
+Under Playwright, headless and headed alike, the visuals never paint, so only the
+report's modelsAndExploration metadata comes back and no querydata fires. Indiana
+district finance is covered by Census F-33 instead; in.gov/dlgf also carries
+district budgets, levies and tax rates.
 """
 
 import sys
@@ -43,7 +27,7 @@ from playwright.sync_api import sync_playwright
 from common.playwright_capture import new_browser_context, is_headless
 from common.file_utils import sha256_file
 from common.manifest import write_csv
-from common.powerbi import decode_querydata, _slug, _capture_report
+from common.powerbi import decode_querydata, _slug
 
 OUT_DIR = Path("data/raw/in/eddata")
 MANIFEST_PATH = OUT_DIR / "manifest.csv"

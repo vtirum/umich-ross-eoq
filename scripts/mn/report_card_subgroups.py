@@ -1,36 +1,23 @@
 """
-mn/report_card_subgroups.py — Minnesota Report Card data BY DEMOGRAPHIC SUBGROUP
+Minnesota Report Card assessment data by student group.
 
-Companion to report_card.py. That script pulls each report for "all students"
-(categories=FOC_NONE). The Report Card API also accepts a `categories=<code>`
-parameter that returns the same report for a single demographic subgroup, so this
-script iterates the valid subgroup codes to capture the race / gender / IEP (special
-education) / ELL / FRP breakdowns.
+The all-students pull (report_card.py) returns no demographic breakdown, but the
+same getdata endpoints accept a `categories` parameter naming a student group, so
+this re-requests each report once per group.
 
-The valid codes per report come from:
-    WFServlet?...IBIF_ex=rptcard_getfilter_demographic.fex&reportCode=<code>
-grouped as ethnicity (8 race groups), gender (male/female), and specialPop
-(EL, specialEd = IEP, FRP, migrant, homeless, ...). Not every report exposes
-gender. One getdata call = one subgroup; the response still carries state +
-district + school context rows for that subgroup.
+Groups: race/ethnicity, gender, special education, English learners, free/reduced
+meals, and homeless.
 
-Only the reports whose getfilter_demographic returns categories are pulled:
-achievement, progress, graduation, attendance, college-going, HS courses,
-well-rounded, and staffing. (demographics IS the breakdown; growth/ELP/engagement
-expose no subgroups.)
+State and district only. School level would be roughly 250k requests and most
+cells are privacy-suppressed at that size anyway; the empty results in the output
+are suppression, not failure.
 
-Output:  data/raw/mn/report_card_subgroups/<report>__<level>.jsonl
-         one line per (org, subgroup): {orgId, orgName, category, categoryGroup, response}
-Manifest: data/raw/mn/report_card_subgroups/manifest.csv
+Note the session handling: MDE throttles a long-running session, so this builds a
+fresh one every 1500 requests and fails fast (1 retry, 20s timeout) rather than
+letting a hung connection stall for minutes.
 
-Run:
-    python scripts/mn/report_card_subgroups.py
-Environment:
-    MN_SUB_LEVELS=state          org levels (default "state"; add district,school —
-                                 note school-level is ~9 reports x ~14 groups x ~2000
-                                 schools and most cells are suppressed)
-    MN_YEAR=2024
-    MN_SUB_REPORTS=graduation,...  restrict to specific reports
+Output:   data/raw/mn/report_card_subgroups/<report>__<groupType>.jsonl
+Env:      MN_SUB_LEVELS=state,district, MN_SUB_REPORTS=northstar_achievement,...
 """
 
 import sys
@@ -43,26 +30,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import tqdm
 import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
+from common.http_client import BROWSER_UA, fail_fast_session as make_session
 from common.manifest import write_csv
-
-
-def make_session(headers=None):
-    """Fail-fast session: the shared client retries 5x with 1.5 backoff, which turns
-    one throttled/hung connection into a 5+ minute stall. Here a bad connection
-    costs ~1 retry and the per-request timeout, then we move on (recorded, retried
-    on a later resume run)."""
-    s = requests.Session()
-    retry = Retry(total=1, connect=1, read=1, backoff_factor=0.5,
-                  status_forcelist=[429, 500, 502, 503, 504], raise_on_status=False)
-    adapter = HTTPAdapter(max_retries=retry, pool_connections=4, pool_maxsize=4)
-    s.mount("https://", adapter)
-    s.mount("http://", adapter)
-    if headers:
-        s.headers.update(headers)
-    return s
 
 
 REQUEST_TIMEOUT = 20  # fail fast on a throttled/hung connection
@@ -76,12 +46,7 @@ YEAR = os.environ.get("MN_YEAR", "2024")
 LEVELS = [x.strip() for x in os.environ.get("MN_SUB_LEVELS", "state").split(",") if x.strip()]
 REPORT_FILTER = {x.strip() for x in os.environ.get("MN_SUB_REPORTS", "").split(",") if x.strip()}
 
-HEADERS = {
-    "User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-                   "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"),
-    "Referer": "https://rc.education.mn.gov/",
-    "Accept": "application/json, text/plain, */*",
-}
+HEADERS = {"User-Agent": BROWSER_UA}
 STATE_ORG = ("999999000000", "Statewide")
 
 # report name -> (reportCode for the org/category filters, getdata fex, extra params)

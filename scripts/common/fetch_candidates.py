@@ -1,18 +1,12 @@
 """
-common/fetch_candidates.py — download the new files found by site_audit.py
+Download the new files reported by site_audit.py.
 
-site_audit.py reports candidates without fetching them. This downloads them, by
-default only real tabular formats (.xlsx/.xls/.csv/.zip) — a DOE site sweep picks up
-hundreds of PDF guidance documents that are not data.
+Defaults to tabular formats only. A DOE sweep turns up far more PDF guidance than
+data (Indiana's was 683 PDFs against 97 data files), so pass --formats explicitly
+if you want those too.
 
-Files land in <out-dir>/<category>/ and a manifest is written alongside, matching the
-layout of the state scrapers so verify_dims.py can run over the result.
-
-Run:
-    python scripts/common/fetch_candidates.py data/raw/in/audit_candidates.csv \\
+    python scripts/common/fetch_candidates.py data/raw/in/audit_candidates.csv \
         --out data/raw/in/audit_new
-    # include PDFs too:
-    python scripts/common/fetch_candidates.py <csv> --out <dir> --formats xlsx,xls,csv,zip,pdf
 """
 
 import argparse
@@ -26,28 +20,14 @@ from urllib.parse import unquote, urlparse
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import tqdm
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
+from common.http_client import BROWSER_UA, make_session
 from common.file_utils import safe_filename, sha256_file
 from common.manifest import write_csv
 
-HEADERS = {"User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-                          "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")}
+HEADERS = {"User-Agent": BROWSER_UA}
 MANIFEST_FIELDS = ["state", "category", "dims", "label", "file_url", "local_path",
                    "status", "size_bytes", "sha256"]
-
-
-def make_session():
-    s = requests.Session()
-    retry = Retry(total=2, connect=2, read=2, backoff_factor=0.5,
-                  status_forcelist=[429, 500, 502, 503, 504], raise_on_status=False)
-    ad = HTTPAdapter(max_retries=retry, pool_connections=4, pool_maxsize=4)
-    s.mount("https://", ad)
-    s.mount("http://", ad)
-    s.headers.update(HEADERS)
-    return s
 
 
 def _filename(resp, url, label):

@@ -1,6 +1,6 @@
 # UMich Ross EOQ Education Data Pipeline
 
-Automated collection of publicly available K-12 education data across 10 states. Covers assessments, enrollment, finance, teacher/staff records, and discipline/suspension data at the state, district, and school level. Designed to be reproducible and extensible to all 50 states.
+Automated collection of publicly available K-12 education data across 17 states. Covers assessments, enrollment, finance, teacher/staff records, and discipline/suspension data at the state, district, and school level. Designed to be reproducible and extensible to all 50 states.
 
 ## States Covered
 
@@ -16,17 +16,21 @@ Automated collection of publicly available K-12 education data across 10 states.
 | **Georgia** | download.gosa.ga.gov, GaDOE Insights (Azure blob) | Static + Dashboard |
 | **Pennsylvania** | futurereadypa.org data files, PDE reports | Static |
 | **Michigan** | mischooldata.org CDN files, legacy ASP.NET dashboard | Static + Browser |
-| **Minnesota** | rc.education.mn.gov (Minnesota Report Card, WebFOCUS JSON API) | API |
+| **Minnesota** | pub.education.mn.gov MDE Analytics (file listers), rc.education.mn.gov API | Static + API |
+| **Kansas** | datacentral.ksde.gov report generator (ASP.NET postback → .xls) | Form replication |
+| **Mississippi** | mdek12.org/publicreporting (per-year + topic pages) | Static |
+| **New Mexico** | web.ped.nm.gov accountability + directory pages | Static |
+| **Idaho** | sde.idaho.gov finance-transparency, idahoreportcard.org export API | Static + API |
 | **Missouri** | apps.dese.mo.gov/MCDS (Missouri Comprehensive Data System bulk files) | Static |
 | **Indiana** | in.gov/doe/it/data-center-and-reports (IDOE Data Center bulk files) | Static |
 
 **Federal supplements (all states):**
-- `scripts/crdc/` — CRDC discipline, enrollment, and staff (covers all 10 states)
+- `scripts/crdc/` — CRDC discipline, enrollment, and staff (covers every state)
 - `scripts/census_f33/` — Census F-33 district finance survey (fills gaps where state finance sources are blocked)
 
 ## Data Categories
 
-All five categories are covered for all 10 states:
+All five categories are covered for all 17 states:
 
 - **Assessment** — ELA, Math, Science, ACT, SAT, AP, SBAC, MCAS, M-STEP, etc.
 - **Financial** — per-pupil expenditure, revenue/expenditure by fund, SACS, F-33
@@ -48,18 +52,18 @@ umich-ross-eoq/
       file_utils.py          # safe filenames, sha256, file type helpers
       manifest.py            # manifest CSV writer (skip-existing + tracking)
       playwright_capture.py  # shared Playwright browser setup
-    az/                      # Arizona
-    ca/                      # California
-    census_f33/              # Federal Census F-33 finance (all states)
-    crdc/                    # Federal CRDC discipline/enrollment/staff (all states)
-    fl/                      # Florida
-    ga/                      # Georgia
-    ma/                      # Massachusetts
-    mi/                      # Michigan
-    nv/                      # Nevada
-    ny/                      # New York
-    pa/                      # Pennsylvania
-    ut/                      # Utah
+      static_site.py         # generic crawl+download engine (ID, MS, NM)
+      powerbi.py             # Power BI DSR capture/decode (AZ, IN)
+      llm_assist.py          # local-LLM classification (Ollama)
+      verify_dims.py         # deterministic demographic-column detection
+      catalog_local.py       # catalogue files already on disk, from their contents
+      site_audit.py          # crawl + diff vs manifest to find missed files
+    az/ ca/ fl/ ga/            # one directory per state
+    id/ in/ ks/ ma/ mi/
+    mn/ mo/ ms/ nm/ nv/
+    ny/ pa/ ut/
+    census_f33/              # federal district finance (all states)
+    crdc/                    # federal discipline/enrollment/staff (all states)
   data/
     raw/                     # downloaded files (not committed — share via Drive)
       az/
@@ -106,9 +110,8 @@ python scripts/az/accountability_research.py   # static accountability + assessm
 python scripts/az/report_cards_reports.py      # report cards API (all entities × years)
 python scripts/az/finance_static_download.py   # static finance files
 python scripts/az/finance_dynamic_download.py  # dynamic finance portal (Playwright)
-python scripts/az/workforce_dashboards.py      # ADE Workforce (Power BI) teacher demographics:
-                                               #   race, gender, education, experience, content area,
-                                               #   grade band, county + 2019-2026 trends (TIA-sourced)
+python scripts/az/workforce_dashboards.py      # ADE Workforce (Power BI): teacher race, gender,
+                                               #   education, experience, county + 2019-2026 trends
 ```
 
 ### Florida
@@ -116,8 +119,8 @@ python scripts/az/workforce_dashboards.py      # ADE Workforce (Power BI) teache
 python scripts/fl/scrape.py            # static FLDOE data pages
 python scripts/fl/report_cards.py      # FL report cards API (includes GetTGELA: assessment by gender/race/IEP/ELL)
 python scripts/fl/edudata_export.py    # Tableau/edudata API
-python scripts/fl/fldoe_download.py    # fldoe.org bulk files via Wayback Machine proxy (bypasses Akamai WAF):
-                                       #   attendance, enrollment, staff, graduation, 2025 FAST assessments
+python scripts/fl/fldoe_download.py    # fldoe.org bulk files via Wayback proxy (Akamai blocks direct):
+                                       #   attendance, enrollment, staff, graduation, 2025 FAST
 ```
 
 ### California
@@ -131,9 +134,8 @@ python scripts/ca/local_portals_download.py # DataSF + Oakland Open Data (Tier-L
 ```bash
 python scripts/ut/download.py                 # USBE reports page bulk Excel/PDF downloads
 python scripts/ut/opendata_download.py        # Utah Open Data (opendata.utah.gov) USBE-owned datasets
-python scripts/ut/datagateway_proficiency.py  # USBE Data Gateway (Tableau) RISE/UA Plus/DLM proficiency
-                                              #   BY DEMOGRAPHIC GROUP incl. gender (the static reports
-                                              #   omit gender); state-level, all years, via Tableau API
+python scripts/ut/datagateway_proficiency.py  # Data Gateway (Tableau): proficiency by demographic
+                                              #   group incl. gender, which the static reports omit
 ```
 
 ### Nevada
@@ -181,40 +183,24 @@ python scripts/mi/dashboard_scrape.py # legacy ASP.NET dashboard (enrollment, gr
 
 ### Minnesota
 ```bash
-python scripts/mn/report_card.py     # Minnesota Report Card WebFOCUS API — 16 report types at
-                                     #   state + district + school level: assessment (North Star
-                                     #   achievement/progress, MN Growth, NAEP), demographics,
-                                     #   graduation, staffing, fiscal transparency, college-going,
-                                     #   English learners, early childhood, HS courses, well-rounded
+python scripts/mn/mde_analytics_files.py    # MDE Analytics bulk files (the main source)
+python scripts/mn/report_card.py            # Report Card API, all students
+python scripts/mn/report_card_subgroups.py  # same reports by student group
 ```
-```bash
-python scripts/mn/report_card_subgroups.py  # same reports BY DEMOGRAPHIC SUBGROUP —
-                                             #   race (8 ethnicity groups), IEP (special ed),
-                                             #   ELL, FRP, + gender (graduation/participation/
-                                             #   college). Uses the Report Card `categories=`
-                                             #   param; report_card.py alone is all-students only.
-```
-Environment overrides: `MN_YEAR` (default 2024, trends embedded), `MN_LEVELS=state,district,school`, `MN_REPORTS=graduation,demographics,...` (all-students script); `MN_SUB_LEVELS=state,district` (subgroup script — school-level is possible but ~250k requests and mostly privacy-suppressed). Discipline (suspensions/expulsions/violence/referrals) and detailed MCA-by-test/subject/grade are form-driven endpoints not yet wired; discipline is covered for MN by CRDC.
+`MN_TOPICS=1,545,87` limits the file-lister topics; `MN_YEAR`, `MN_LEVELS` and `MN_REPORTS` control the API scripts.
 
-### Minnesota — MDE Analytics bulk files
-```bash
-python scripts/mn/mde_analytics_files.py   # pub.education.mn.gov/MDEAnalytics file-listing topics
-```
-The MDE Analytics portal has ~59 topics in **two flavors**, and the distinction matters:
+Minnesota's main source is MDE Analytics, and its 59 topics come in two flavours — the distinction is the whole trick:
 
-- **File-listing topics** (Assessment Files, Graduation, ACT, Student, Schools & Districts, North Star, Course Taking, Student Survey) — dropdown filters + a "List files" button that returns a table of bulk files. The files are served from `education.mn.gov/mdeprod/idcplg?IdcService=GET_FILE&dDocName=<ID>`, a host with **no bot protection**, so they download with plain requests. **This is where MN's disaggregated statewide assessment data lives**: 602 files, 1998-2025 (MCA, MTAS, Alt-MCA, MOD, GRAD, BST, ACCESS/Alternate ACCESS, TEAE, MTELL, SOLOM, WIDA) at state/county/district/school level, broken out by student group (race/ethnicity, gender, special education, English learner, FRP) subject to small-N suppression. The script replicates the listing POST (`IBIF_ex=mdea_ddl_file_listing`, `COMBO1-5=FOC_NONE`, plus a per-session `IBIWF_SES_AUTH_TOKEN` scraped from the driver page).
-- **Report-runner topics** (Discipline Data, the School Finance/UFARS sections, Special Ed profiles) — interactive WebFOCUS reports whose "Run Report" trips **PerimeterX (HUMAN)** bot detection (`js_zpsbd3` beacon) from an automated browser. Not scraped; backstopped by CRDC (discipline) and Census F-33 (finance).
+- **File listers** (Assessment, Graduation, ACT, Student, Schools & Districts, North Star, Course Taking) look like dashboards but behave like a static index: set the dropdowns, press "List files", get direct download links. This is where the disaggregated statewide assessment data lives — 600 files spanning 1998-2025 (MCA, MTAS, Alt-MCA, MOD, GRAD, BST, ACCESS, TEAE, MTELL, SOLOM, WIDA) at state/county/district/school, each carrying Group Category and Student Group columns for race, gender, special education, English proficiency, economic status, homeless, migrant, military and SLIFE.
+- **Report runners** (Discipline, School Finance/UFARS, Special Ed profiles) trip PerimeterX on "Run Report" and never generate. Backstopped by CRDC and Census F-33.
 
-`MN_TOPICS=1,545,87` restricts to specific TOPICIDs. Note the files are large (single assessment files run 100 MB+); the Student Survey topic alone is 1,456 files and is excluded from the default core run.
+The Report Card API adds 16 report types at all three levels; note it returns all-students only, so `report_card_subgroups.py` re-requests each report per student group via the `categories=` parameter. Files here are large — single assessment files exceed 100 MB, and the Student Survey topic alone is 1,456 files, excluded from the default run.
 
 ### Missouri
 ```bash
-python scripts/mo/mcds_download.py   # MCDS bulk files (apps.dese.mo.gov/MCDS): browser harvests
-                                     #   the JS-rendered file links per category, requests downloads
-                                     #   each. Assessment (MAP by content area/grade + subgroup,
-                                     #   score distributions), enrollment/demographics (to 1991),
-                                     #   finance (per-pupil expenditures, ASBR), staff (faculty,
-                                     #   certification, ratios), graduation/dropout, discipline
+python scripts/mo/mcds_download.py   # MCDS bulk files: MAP results by content area/grade and
+                                     #   subgroup, enrollment to 1991, per-pupil expenditures,
+                                     #   ASBR finance, faculty/certification, graduation, discipline
 ```
 Not included: MCDS SSRS report-viewer reports (`SSRS_Print.aspx`) and Visualizations
 dashboards. Re-checked during the coverage audit: `SSRS_Print.aspx?Reportid=...` serves
@@ -264,6 +250,30 @@ The embed only renders inside the wrapper page (loading the iframe URL directly 
 a spinner), and under Playwright — headless *and* headed — the visuals never paint, so
 only the report's `modelsAndExploration` metadata is returned and no `querydata` fires.
 Indiana district finance is therefore covered by **Census F-33**.
+
+### Kansas
+```bash
+python scripts/ks/download.py          # KSDE Data Central: 19 reports x state/district/county x
+                                       #   years, most already broken out by race/ethnicity
+```
+`KS_YEARS=2019-2025` and `KS_REPORTS=13,7` narrow the run. There is no JSON API: the page is ASP.NET WebForms and the final submit returns `application/vnd.ms-excel` directly, so the generator *is* the download endpoint. KSDE also serves an incomplete TLS chain, so certificate verification is disabled for that host (public data, no credentials sent).
+
+### Mississippi / New Mexico / Idaho
+```bash
+python scripts/ms/download.py          # mdek12.org/publicreporting — per-year (2018-19..2025-26)
+                                       #   + Assessment/Accountability/Reports/Diplomas/Staff pages
+python scripts/nm/download.py          # web.ped.nm.gov — achievement by year (ELA/Math/Science
+                                       #   proficiency, incl. by-assessment and by-subtest/grade),
+                                       #   graduation cohorts 4/5/6-yr, schools directory
+python scripts/id/download.py          # sde.idaho.gov finance-transparency — ADA/support units,
+                                       #   enrollment by building/district/grade, revenues &
+                                       #   expenditures, financial summaries, staff salary reports
+python scripts/id/reportcard.py        # idahoreportcard.org export API: 38 measures x 6 years at
+                                       #   state+district+school x 29 student groups (192 files,
+                                       #   5.7M rows)
+```
+The Report Card is a Blazor app, but its export is a plain unauthenticated JSON endpoint (`POST /api/DataExport/csv`); the numeric measure/breakdown ids were recovered by probing it and reading the `Measure Label`/`Student Group` columns back. That yields **38 measures vs the 18 the UI lists**, and exposes Male/Female, which the UI buries in a nested picker. Oversized selections are refused, so the breakdown list is split in half recursively per measure-year.
+All three share the crawl engine in `scripts/common/static_site.py` (seeds + a follow regex). Note Mississippi rejects file requests that arrive without a same-site `Referer`; the engine retries with one.
 
 ### Federal Datasets
 ```bash
@@ -355,12 +365,22 @@ blank submission templates and file-layout specs (Missouri's MOSIS batch files d
 `Gender: 0 = female, 1 = male` but hold no records). It answers "does this file have
 demographic fields", not "does this file contain data". Check row counts too.
 
-Verified demographic coverage (from file contents, not filenames):
+Verified demographic coverage, read from file contents rather than filenames
+(states scraped as API/JSONL rather than files are not listed):
 
-| State | files w/ demographics | race | IEP/504 | ELL | FRL | gender |
+| State | files w/ demographics | race | gender | IEP/504 | ELL | FRL |
 |---|---|---|---|---|---|---|
-| Indiana | 296 / 330 | 296 | 223 | 129 | 141 | 111 |
-| Missouri | 109 / 252 | 96 | 68 | 94 | 37 | **3** |
+| Minnesota | 487 / 788 | 420 | 197 | 325 | 345 | 209 |
+| Kansas | 479 / 604 | 371 | 281 | 387 | 220 | 281 |
+| New Mexico | 195 / 233 | 160 | 148 | 124 | 190 | 151 |
+| Indiana | 296 / 330 | 296 | 111 | 223 | 129 | 141 |
+| Missouri | 115 / 252 | 100 | **3** | 70 | 100 | 38 |
+| Idaho | 80 / 291 | 51 | **1** | 52 | 20 | 0 |
+| Mississippi | 35 / 178 | 26 | 8 | 24 | 14 | 8 |
+
+Missouri's gender count is not a bug — it publishes almost no gender breakdowns.
+Idaho's and Mississippi's totals are depressed by PDFs, which carry no readable
+columns; Idaho's Report Card API data covers that gap separately.
 
 ## Known Limitations and Gaps
 

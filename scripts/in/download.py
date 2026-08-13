@@ -1,36 +1,24 @@
 """
-in/download.py — Indiana DOE (IDOE) Data Center bulk files
+Indiana IDOE Data Center files (in.gov/doe).
 
-Indiana publishes its public education data as direct Excel/PDF files under
-in.gov/doe/files/, linked from the IDOE Data Center and its archive:
+Static crawl of the data centre and its archive, which link straight to
+in.gov/doe/files/*.xlsx. Covers ILEARN 3-8 and Biology (including disaggregated
+versions), IREAD, I AM, SAT, ACT, ECA, enrollment and demographics back to 2006,
+attendance and chronic absenteeism, graduation, federal accountability and teacher
+statistics.
 
-    https://www.in.gov/doe/it/data-center-and-reports/
-    https://www.in.gov/doe/it/data-center-and-reports/data-reports-archive/
+Worth knowing when extending this: Indiana's data is not all under /doe/it/. A
+later audit found finance at /doe/school-operations/finance/ and, more
+importantly, at in.gov/dlgf - a different agency - along with College
+Readiness/Going cohort datasets and special education child counts. Those come in
+via common/fetch_candidates.py into data/raw/in/audit_new.
 
-This is a straightforward static crawl: parse those pages (and any data-center
-sub-pages they link to) for /doe/files/*.xlsx|xls|csv|zip|pdf links, then download
-each with its link text as the label. in.gov is not bot-gated.
+Discipline is not published here; CRDC covers Indiana.
 
-Coverage: assessment (ILEARN grade 3-8 + Biology incl. disaggregated, IREAD, I AM
-alternate, SAT, ACT, ECA, participation), enrollment/demographics (by grade,
-ethnicity, FRL, gender, SpEd/ELL, corporation + school, back to 2006), attendance
-& chronic absenteeism, graduation (state/federal rates, AP, IB), finance (ESSA
-school-level financial, school directory), staff (teacher statistics + licensed
-teacher reports), and federal accountability ratings.
-
-Discipline/suspension is not published on the IDOE Data Center; it is covered for
-Indiana by the federal CRDC pull (scripts/crdc). Interactive EdData / Indiana GPS
-dashboards are not crawled (not bulk files).
-
-Output:  data/raw/in/<category>/<filename>
-Manifest: data/raw/in/manifest.csv
-
-Run:
-    python scripts/in/download.py
+Output:   data/raw/in/<category>/<filename>
 """
 
 import sys
-import re
 import time
 from pathlib import Path
 from urllib.parse import urljoin, urlparse, unquote

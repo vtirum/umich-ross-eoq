@@ -1,20 +1,14 @@
 """
-common/reclassify_manifest.py — re-label an existing download manifest with the local LLM
+Re-label an existing download manifest with the local LLM.
 
-Keyword categorisation is coarse (our Missouri crawl filed 54% of files as "other").
-This re-reads a manifest's human-written labels, asks the local model for a category
-and the demographic breakdowns each file advertises, and writes a sibling file
-`<manifest>_llm.csv` with two extra columns:
+Adds llm_category and llm_dims columns to a copy of the manifest
+(<manifest>_llm.csv); the original is untouched. Keyword categorisation is coarse
+- our Missouri crawl filed 54% of files as "other", which this cuts to 4%.
 
-    llm_category   assessment/enrollment/attendance/graduation/discipline/
-                   staff/finance/directory/other
-    llm_dims       race|gender|iep_504|ell|frl|grade  (pipe-separated, blank if none)
+For demographic dimensions prefer verify_dims.py, which reads the files rather
+than their titles.
 
-The original manifest is left untouched.
-
-Run:
     python scripts/common/reclassify_manifest.py data/raw/mo/mcds/manifest.csv
-    python scripts/common/reclassify_manifest.py data/raw/in/manifest.csv
 """
 
 import csv
