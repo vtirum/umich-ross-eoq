@@ -95,10 +95,53 @@ def crawl(session, seeds, follow_re, depth=1, verbose=True):
     return files
 
 
-def download(session, url, label, out_dir, state):
+# a URL path whose last segment is one of these tells us nothing about the file -
+# every link on the page ends the same way, so naming by basename collides silently
+GENERIC_NAMES = re.compile(r"^(getdocumentfile|download|file|document|export|view|"
+                           r"attachment|index|default)?(\.[a-z0-9]+)?$", re.I)
+
+
+def choose_dest(url, label, cat_dir, claimed):
+    """Destination path for `url`, never one another URL has already taken.
+
+    Two failure modes this avoids. Handler-style URLs (`.../GetDocumentFile?id=123`)
+    all share a basename, so naming by basename makes every download overwrite the
+    last - Arizona lost 69 files that way, each recorded in the manifest as a success.
+    And distinct files in different site folders can legitimately share a basename.
+    """
+    base = safe_filename(unquote(Path(urlparse(url).path).name))
+    if GENERIC_NAMES.match(base):
+        # fall back to the link text, keeping whatever extension the URL implied
+        ext = Path(base).suffix or Path(unquote(url)).suffix
+        if len(ext) > 6 or "/" in ext:
+            ext = ""
+        base = safe_filename((label or "file")[:120] + ext)
+    dest = cat_dir / base
+    if claimed.get(str(dest), url) == url:
+        claimed[str(dest)] = url
+        return dest
+    stem, suffix = Path(base).stem, Path(base).suffix
+    for n in range(2, 500):
+        cand = cat_dir / f"{stem}__{n}{suffix}"
+        if claimed.get(str(cand), url) == url:
+            claimed[str(cand)] = url
+            return cand
+    raise RuntimeError(f"cannot find a free name for {url}")
+
+
+def looks_like_html(path):
+    """True if the bytes are a web page - an error/login page saved under a data name."""
+    head = open(path, "rb").read(600).lstrip()[:400].lower()
+    return head.startswith((b"<!doctype html", b"<html", b"<head")) or b"<html" in head[:200]
+
+
+def download(session, url, label, out_dir, state, claimed=None, flat=False):
     cat = categorise(label, url)
-    dest = Path(out_dir) / cat / safe_filename(unquote(Path(urlparse(url).path).name))
-    dest.parent.mkdir(parents=True, exist_ok=True)
+    # `flat` keeps everything in one directory - used where a state's files already
+    # live flat on disk and re-filing them would strand the existing catalogue
+    cat_dir = Path(out_dir) if flat else Path(out_dir) / cat
+    cat_dir.mkdir(parents=True, exist_ok=True)
+    dest = choose_dest(url, label, cat_dir, claimed if claimed is not None else {})
     row = {"state": state, "category": cat, "label": label[:150], "file_url": url,
            "local_path": str(dest), "status": "", "size_bytes": "", "sha256": ""}
     if dest.exists() and dest.stat().st_size > 0:
@@ -124,15 +167,20 @@ def download(session, url, label, out_dir, state):
             dest.unlink()
         row["status"] = f"error:{str(e)[:60]}"
         return row
-    if dest.stat().st_size < 50:
+    if dest.stat().st_size < 1024:
         dest.unlink()
         row["status"] = "too_small"
+        return row
+    if not url.lower().rstrip("/").endswith((".html", ".htm")) and looks_like_html(dest):
+        # an error, login or Cloudflare page served with a 200 and a data filename
+        dest.unlink()
+        row["status"] = "html_not_data"
         return row
     row.update(status="downloaded", size_bytes=dest.stat().st_size, sha256=sha256_file(dest))
     return row
 
 
-def run(state, seeds, out_dir, follow=None, depth=1, extra_files=None):
+def run(state, seeds, out_dir, follow=None, depth=1, extra_files=None, flat=False):
     """Crawl + download + manifest. `extra_files` is an optional {url: label} to add."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -148,9 +196,9 @@ def run(state, seeds, out_dir, follow=None, depth=1, extra_files=None):
     from collections import Counter
     print("by category:", dict(Counter(categorise(l, u) for u, l in files.items()).most_common()))
 
-    manifest = []
+    manifest, claimed = [], {}
     for url, label in tqdm.tqdm(files.items(), desc=f"{state} downloads"):
-        manifest.append(download(session, url, label, out_dir, state))
+        manifest.append(download(session, url, label, out_dir, state, claimed, flat))
         time.sleep(0.1)
 
     mpath = out_dir / "manifest.csv"

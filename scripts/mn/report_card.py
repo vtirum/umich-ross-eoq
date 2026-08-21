@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import tqdm
 
 from common.http_client import make_session
-from common.manifest import write_csv
+from common.manifest import merge_csv
 
 BASE = "https://rc.education.mn.gov/ibi_apps/WFServlet"
 APP = "rptcard_reports"
@@ -213,7 +213,8 @@ def main():
                 "local_path": str(out_path), "status": "ok",
             })
 
-    write_csv(MANIFEST_PATH, manifest, MANIFEST_FIELDS)
+    # merge so a scoped run does not discard other slices already on disk
+    manifest = merge_csv(MANIFEST_PATH, manifest, MANIFEST_FIELDS, "local_path")
     print(f"\nDone. {len(manifest)} report/level files. Manifest: {MANIFEST_PATH}")
 
 

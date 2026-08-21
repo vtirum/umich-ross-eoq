@@ -35,7 +35,7 @@ import urllib3
 from bs4 import BeautifulSoup
 
 from common.file_utils import sha256_file
-from common.manifest import write_csv
+from common.manifest import merge_csv
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -197,7 +197,8 @@ def main():
         manifest.append(row)
         time.sleep(0.3)
 
-    write_csv(MANIFEST_PATH, manifest, MANIFEST_FIELDS)
+    # merge so a scoped run does not discard other slices already on disk
+    manifest = merge_csv(MANIFEST_PATH, manifest, MANIFEST_FIELDS, "local_path")
     ok = sum(1 for r in manifest if r["status"] in ("downloaded", "skipped_existing"))
     mb = sum(int(r["size_bytes"]) for r in manifest if str(r["size_bytes"]).isdigit()) / 1e6
     print(f"\nDone. {ok}/{len(manifest)} report-files ({mb:.1f} MB). Manifest: {MANIFEST_PATH}")

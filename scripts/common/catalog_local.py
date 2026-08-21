@@ -21,6 +21,7 @@ TEMPLATE_MAX_ROWS is forced out of that category.
 
 import argparse
 import csv
+import datetime
 import re
 import sys
 from pathlib import Path
@@ -38,6 +39,9 @@ TEMPLATE_MAX_ROWS = 50   # above this a file is data, whatever its column names 
 VALID_CATEGORIES = {"assessment", "enrollment", "attendance", "graduation", "discipline",
                     "staff", "finance", "directory", "template", "other"}
 YEAR_RE = re.compile(r"(19|20)\d{2}")
+# school data does not predate this and cannot be dated past next year
+MIN_YEAR = 1985
+MAX_YEAR = datetime.date.today().year + 1
 
 # Entity level is a plain column-name question, so decide it deterministically
 # rather than asking the model (which left it blank on files whose headers plainly
@@ -74,13 +78,18 @@ For each numbered file return:
   "n"        the file's number
   "category" exactly one of: {cats}
   "topic"    a short human label for what the file contains, max 8 words
-             (e.g. "MCA math proficiency by student group", "district per-pupil expenditures")
+             (e.g. "reading proficiency by student group", "district per-pupil expenditures").
+             Name an assessment programme ONLY if that name appears in this file's own
+             filename, sheets or columns. Do not carry a name over from another entry or
+             from the examples in these instructions - the files span many states and each
+             state has its own tests.
   "levels"   which entity levels the columns imply, any of: state, county, district, school
              (look for District Name/Number, School Name/Number, County columns)
   "conf"     your confidence 0-1 that this classification is right
 
 Category guidance:
-- assessment = test/exam results (MCA, MTAS, ILEARN, IREAD, MAP, SAT, ACT, WIDA, ACCESS, EOC, proficiency, scale score)
+- assessment = test/exam results of any kind (proficiency, scale score, performance level,
+  participation), whatever the state calls its exam
 - enrollment = student counts, membership, demographics, free/reduced-price meal counts
 - attendance = attendance rate, absenteeism, ADA/ADM, mobility
 - staff = teachers, faculty, educators, certification, salary, personnel, staff ratios
@@ -175,8 +184,12 @@ def _signature(path):
                 n_rows = len(lines) + sum(1 for _ in f)
     except Exception:
         pass
-    blob = " ".join([p.name] + sheets + columns + sample[:40])
-    years = sorted({m.group(0) for m in YEAR_RE.finditer(blob)})[:6]
+    # Years come from structural text only - filename, sheet names, column headers.
+    # Sample values are data: an attendance count of 2081 or 1901 is not a year, and
+    # scanning them gave Kansas files year ranges like "1900-2096".
+    blob = " ".join([p.name] + sheets + columns)
+    years = sorted({m.group(0) for m in YEAR_RE.finditer(blob)
+                    if MIN_YEAR <= int(m.group(0)) <= MAX_YEAR})[:6]
     return sheets, columns, sample, years, n_rows
 
 
@@ -191,6 +204,29 @@ def _entry_text(i, rec):
     if rec["sample"]:
         parts.append(f"   values: {', '.join(rec['sample'][:12])}")
     return "\n".join(p[:400] for p in parts)
+
+
+# Assessment programmes are state-specific. The model used to copy a name it had seen
+# in another entry (or in the prompt's own examples) onto an unrelated state's file -
+# 21 Kansas files were catalogued as "MCA ...", which is Minnesota's test. The name is
+# only allowed to stand if it actually occurs in the file's own signature.
+PROGRAMMES = re.compile(
+    r"\b(MCA|MTAS|ILEARN|IREAD|ISTEP|AzMERIT|AASA|AzSCI|AZELLA|AIMS|KAP|MAP|MSAA|"
+    r"SBAC|CAASPP|ELPAC|MCAS|STAAR|PARCC|WIDA|ACCESS|ISAT|IAR|NJSLA|FAST|FSA|EOC|"
+    r"NAEP|ACT|SAT|PSAT|AP|IB)\b", re.I)
+
+
+def _scrub_topic(topic, rec):
+    """Drop a programme name the file itself never mentions."""
+    if not topic:
+        return topic
+    hay = " ".join([rec.get("name", ""), " ".join(rec.get("sheets") or []),
+                    " ".join(rec.get("columns") or [])]).lower()
+    def keep(m):
+        return m.group(0) if m.group(0).lower() in hay else ""
+    cleaned = PROGRAMMES.sub(keep, topic)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip(" ,-")
+    return cleaned or topic if not cleaned else cleaned
 
 
 def classify(records, batch=12, verbose=True):
@@ -235,13 +271,42 @@ def classify(records, batch=12, verbose=True):
                 cat = "other"
             out[start + n] = {
                 "category": cat,
-                "topic": str(rec.get("topic", ""))[:90],
+                "topic": _scrub_topic(str(rec.get("topic", ""))[:90], chunk[n]),
                 "levels": "|".join(str(x).lower().strip() for x in lv
                                    if str(x).lower().strip() in
                                    ("state", "county", "district", "school")),
                 "conf": rec.get("conf", ""),
             }
     return out
+
+
+CATALOG_FIELDS = ["path", "size_mb", "sheets", "n_cols", "n_rows", "columns", "years",
+          "llm_category", "llm_topic", "llm_confidence",
+          "entity_levels", "verified_dims", "dims_source"]
+
+
+def _write(out, records, results, kept=()):
+    """Write kept (unchanged) rows plus this run's new ones, in path order."""
+    rows = list(kept)
+    for rec, res in zip(records, results):
+        rows.append({
+            "path": rec["path"], "size_mb": rec["size_mb"],
+            "sheets": "|".join(rec["sheets"][:6]), "n_cols": len(rec["columns"]),
+            "n_rows": rec["n_rows"] if rec["n_rows"] is not None else "",
+            "columns": "|".join(rec["columns"][:25]), "years": "|".join(rec["years"]),
+            "llm_category": (res or {}).get("category", ""),
+            "llm_topic": (res or {}).get("topic", ""),
+            "llm_confidence": (res or {}).get("conf", ""),
+            "entity_levels": "|".join(rec["levels"]),
+            "verified_dims": "|".join(rec["dims"]), "dims_source": rec["dims_source"],
+        })
+    rows.sort(key=lambda r: r["path"])
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    with open(out, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=CATALOG_FIELDS, extrasaction="ignore")
+        w.writeheader()
+        w.writerows(rows)
+    return rows
 
 
 def main():
@@ -251,6 +316,8 @@ def main():
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--no-llm", action="store_true")
     ap.add_argument("--min-kb", type=int, default=1)
+    ap.add_argument("--full", action="store_true",
+                    help="re-catalogue every file, ignoring the existing output")
     args = ap.parse_args()
 
     root = Path(args.root)
@@ -260,6 +327,35 @@ def main():
     if args.limit:
         files = files[:args.limit]
     print(f"{len(files)} data files under {root}")
+
+    # Re-cataloguing is the expensive half (one LLM call per ~12 files), and most of a
+    # run is usually files that have not changed since last time. Keep rows whose path
+    # and byte size both match the existing catalogue and only process the rest.
+    # Size is the check rather than mtime because cloud sync rewrites mtime on files
+    # whose contents never changed.
+    kept = []
+    if not args.full and Path(args.out).exists():
+        try:
+            prior = {r["path"]: r for r in
+                     csv.DictReader(open(args.out, newline="", encoding="utf-8"))}
+        except Exception:
+            prior = {}
+        fresh = []
+        for p in files:
+            row = prior.get(str(p))
+            if row and row.get("size_mb") == str(round(p.stat().st_size / 1e6, 2)):
+                kept.append(row)
+            else:
+                fresh.append(p)
+        if kept:
+            print(f"  {len(kept)} unchanged since last catalogue, {len(fresh)} to process "
+                  f"(--full to redo everything)")
+        files = fresh
+    if not files:
+        print("nothing new to catalogue")
+        if kept:
+            _write(args.out, [], [], kept)
+        return
 
     records = []
     for p in tqdm.tqdm(files, desc="reading signatures"):
@@ -284,28 +380,20 @@ def main():
             results = classify(records)
 
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-    with open(args.out, "w", newline="", encoding="utf-8") as f:
-        w = csv.writer(f)
-        w.writerow(["path", "size_mb", "sheets", "n_cols", "n_rows", "columns", "years",
-                    "llm_category", "llm_topic", "llm_confidence",
-                    "entity_levels", "verified_dims", "dims_source"])
-        for rec, res in zip(records, results):
-            w.writerow([
-                rec["path"], rec["size_mb"], "|".join(rec["sheets"][:6]),
-                len(rec["columns"]), rec["n_rows"] if rec["n_rows"] is not None else "",
-                "|".join(rec["columns"][:25]), "|".join(rec["years"]),
-                (res or {}).get("category", ""), (res or {}).get("topic", ""),
-                (res or {}).get("conf", ""),
-                "|".join(rec["levels"]), "|".join(rec["dims"]), rec["dims_source"],
-            ])
+    rows = _write(args.out, records, results, kept)
 
     from collections import Counter
-    print(f"\nwrote {args.out}")
-    if any(results):
-        print("categories:", dict(Counter((r or {}).get("category", "?") for r in results).most_common()))
-    withdims = [r for r in records if r["dims"]]
-    print(f"files with verified demographic columns: {len(withdims)}/{len(records)}")
-    print("dimensions:", dict(Counter(d for r in withdims for d in r["dims"]).most_common()))
+    # report on the whole catalogue, not just this run - after an incremental run the
+    # new records are a handful of files and their counts say nothing useful
+    print(f"\nwrote {args.out}: {len(rows)} files "
+          f"({len(records)} new/changed this run)")
+    cats = Counter(r["llm_category"] or "?" for r in rows)
+    if cats:
+        print("categories:", dict(cats.most_common()))
+    withdims = [r for r in rows if r["verified_dims"]]
+    print(f"files with verified demographic columns: {len(withdims)}/{len(rows)}")
+    print("dimensions:", dict(Counter(
+        d for r in withdims for d in r["verified_dims"].split("|") if d).most_common()))
 
 
 if __name__ == "__main__":

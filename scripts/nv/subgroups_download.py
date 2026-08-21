@@ -150,7 +150,8 @@ def main():
     print(f"  subgroups: {SUBGROUPS}")
     print(f"  datasets: {[d['name'] for d in DATASETS]}")
 
-    manifest = IncrementalManifest(MANIFEST_PATH, MANIFEST_FIELDS)
+    manifest = IncrementalManifest(MANIFEST_PATH, MANIFEST_FIELDS,
+                                   key=["dataset", "year", "scope"])
     saved = 0
     for ds in tqdm.tqdm(DATASETS, desc="NV subgroup datasets"):
         try:
@@ -164,6 +165,8 @@ def main():
         if row["status"] in ("downloaded", "skipped_existing"):
             saved += 1
         time.sleep(1)
+
+    manifest.finalize()
 
     print(f"\nDone. {saved}/{len(DATASETS)} subgroup CSVs. Manifest: {MANIFEST_PATH}")
 

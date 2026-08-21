@@ -218,11 +218,16 @@ def main():
           f"{sum(1 for o in orgs if o['type']=='D')} districts, "
           f"{sum(1 for o in orgs if o['type']=='B')} schools); collection {col}")
 
-    dash_mf = IncrementalManifest(OUT_DIR / "dashboard_manifest.csv", DASH_FIELDS)
+    dash_mf = IncrementalManifest(OUT_DIR / "dashboard_manifest.csv", DASH_FIELDS,
+                                  key=["level", "org_id", "year"])
     crawl_dashboard(orgs, dash_mf)
 
-    detail_mf = IncrementalManifest(OUT_DIR / "detail_manifest.csv", DETAIL_FIELDS)
+    detail_mf = IncrementalManifest(OUT_DIR / "detail_manifest.csv", DETAIL_FIELDS,
+                                    key=["exam", "report", "year"])
     crawl_detail(year_code, exams, col, detail_mf)
+
+    dash_mf.finalize()
+    detail_mf.finalize()
 
     print(f"\nDone. Output: {OUT_DIR}")
 

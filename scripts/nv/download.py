@@ -159,7 +159,8 @@ def main():
     print(f"  working datasets: {[d['name'] for d in DATASETS]}")
     print(f"  deferred (need per-exam score IDs): {list(DEFERRED_EXAM_CODES)}")
 
-    manifest = IncrementalManifest(MANIFEST_PATH, MANIFEST_FIELDS)
+    manifest = IncrementalManifest(MANIFEST_PATH, MANIFEST_FIELDS,
+                                   key=["dataset", "year", "scope"])
     saved = 0
     for ds in tqdm.tqdm(DATASETS, desc="NV datasets"):
         try:
@@ -173,6 +174,8 @@ def main():
         if row["status"] in ("downloaded", "skipped_existing"):
             saved += 1
         time.sleep(0.5)
+
+    manifest.finalize()
 
     print(f"\nDone. {saved}/{len(DATASETS)} dataset CSVs. Manifest: {MANIFEST_PATH}")
 

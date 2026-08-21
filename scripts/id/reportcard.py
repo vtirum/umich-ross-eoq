@@ -33,7 +33,7 @@ import tqdm
 import requests
 
 from common.file_utils import sha256_file
-from common.manifest import write_csv
+from common.manifest import merge_csv
 
 URL = "https://www.idahoreportcard.org/api/DataExport/csv"
 OUT_DIR = Path("data/raw/id/reportcard")
@@ -199,7 +199,8 @@ def main():
         manifest.append(row)
         time.sleep(0.2)
 
-    write_csv(MANIFEST_PATH, manifest, MANIFEST_FIELDS)
+    # merge so a scoped run does not discard other slices already on disk
+    manifest = merge_csv(MANIFEST_PATH, manifest, MANIFEST_FIELDS, "local_path")
     ok = sum(1 for r in manifest if r["status"] in ("downloaded", "skipped_existing"))
     tot = sum(int(r["n_rows"]) for r in manifest if str(r["n_rows"]).isdigit())
     mb = sum(int(r["size_bytes"]) for r in manifest if str(r["size_bytes"]).isdigit()) / 1e6

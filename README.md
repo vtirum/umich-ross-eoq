@@ -17,7 +17,7 @@ Automated collection of publicly available K-12 education data across 17 states.
 | **Pennsylvania** | futurereadypa.org data files, PDE reports | Static |
 | **Michigan** | mischooldata.org CDN files, legacy ASP.NET dashboard | Static + Browser |
 | **Minnesota** | pub.education.mn.gov MDE Analytics (file listers), rc.education.mn.gov API | Static + API |
-| **Kansas** | datacentral.ksde.gov report generator (ASP.NET postback → .xls) | Form replication |
+| **Kansas** | datacentral.ksde.gov report generator, ksreportcard.ksde.gov full-file workbooks + service | Form replication + Static + API |
 | **Mississippi** | mdek12.org/publicreporting (per-year + topic pages) | Static |
 | **New Mexico** | web.ped.nm.gov accountability + directory pages | Static |
 | **Idaho** | sde.idaho.gov finance-transparency, idahoreportcard.org export API | Static + API |
@@ -106,13 +106,55 @@ All scripts are run from the repo root and write output to `data/raw/<state>/`.
 
 ### Arizona
 ```bash
-python scripts/az/accountability_research.py   # static accountability + assessment files
-python scripts/az/report_cards_reports.py      # report cards API (all entities × years)
+python scripts/az/azed_data_pages.py            # the three file-bearing pages under the
+                                               #   Public Data Sets hub: accountability
+                                               #   (assessment/graduation/dropout/Oct-1
+                                               #   enrollment), hns/frp (free & reduced-price
+                                               #   percentages), sppapr (IDEA indicator
+                                               #   profiles incl. Ind 4 suspension)
+python scripts/az/report_cards_reports.py      # report cards API, FY2018-2025
+                                               #   (AZ_RC_YEARS=2019,2020 narrows a run)
 python scripts/az/finance_static_download.py   # static finance files
 python scripts/az/finance_dynamic_download.py  # dynamic finance portal (Playwright)
 python scripts/az/workforce_dashboards.py      # ADE Workforce (Power BI): teacher race, gender,
                                                #   education, experience, county + 2019-2026 trends
 ```
+
+`azed.gov/data/public-data-sets` is a hub page — it holds one PDF and links out to the
+pages that actually publish files. Crawling only `accountability-research/data` (which is
+what we did at first) misses free/reduced-price lunch and the IDEA indicator profiles
+entirely, so `azed_data_pages.py` seeds from all three.
+
+Two bugs worth remembering, both found in an audit rather than at runtime:
+
+- **Handler URLs collide.** The accountability page used to serve files through
+  `.../GetDocumentFile?id=N`. Naming downloads after the URL's last path segment gave all
+  of them the name `GetDocumentFile`, so each overwrote the last — **69 files reduced to
+  one**, and because the next run saw that file already on disk it recorded all 69 as
+  `skipped_existing`. Nine years of graduation cohorts, five of dropout and six of Oct-1
+  enrollment were missing while the manifest read 132/132 clean. `static_site.choose_dest`
+  now falls back to the link text whenever the basename is generic, and refuses to let two
+  URLs claim one path.
+- **HTML saved as data.** Failed fetches returned a 536-byte Cloudflare page with a 200,
+  which got written as `.pdf` and hashed into the manifest as a success.
+  `static_site.looks_like_html` now rejects those, and 12 were cleared out of `data/raw/az/`.
+
+The report cards API serves FY2018-2025; the script used to take only the most recent
+year (`fiscal_years[-1:]`), leaving six years unfetched. All eight are now on disk
+(~11 GB, ~71,500 JSON files per year across state, 15,111 district and 56,373 school
+entities). A third of each year is `[]` — an endpoint with nothing to report for that
+entity — rising to about 70% in the older years.
+
+- **Scoped runs used to truncate the manifest.** `IncrementalManifest` opened its file
+  with `"w"`, so a run limited to one fiscal year left a manifest describing only that
+  year while eight years of data sat on disk. It now reads prior rows and writes them
+  back before appending, and `finalize()` collapses duplicates on a caller-supplied key
+  so a re-run updates a row instead of doubling it. Five scripts share the class (AZ, FL,
+  and three NV). `scripts/az/rebuild_reportcards_manifest.py` reconstructs the AZ manifest
+  from the tree rather than re-downloading 11 GB to regenerate it.
+
+Checked and deliberately skipped: `azed.gov/cte/data` — 134 files, but bulk-upload
+templates, user guides and policy PDFs rather than data.
 
 ### Florida
 ```bash
@@ -146,7 +188,19 @@ python scripts/nv/download.py            # NV Report Card API — 6 assessments 
 python scripts/nv/subgroups_download.py  # same 6 assessments by race/ethnicity, gender, IEP, EL, FRL
 python scripts/nv/reportcard_full.py     # extended NV report card categories
 python scripts/nv/doe_download.py        # doe.nv.gov topic pages (enrollment, finance, staff, CTE)
+python scripts/nv/reorganize.py          # one-off tidy-up of data/raw/nv (idempotent)
 ```
+Nevada's output grew across several scripts and needed flattening. `reorganize.py`
+consolidates the report card's **9,061 single-record JSON files into one
+`reportcard/dashboard.csv`** (9,061 rows x 69 columns, state/district/school,
+2014-2025), moves the twelve one-file `assessment_*` directories into
+`assessment/<exam>.csv`, merges the five per-script manifests into `manifest_all.csv`,
+and clears empty directories. Raw JSON is kept alongside the CSV; the only deletions
+are empty directories and `.DS_Store`.
+
+`reportcard/detail/` stays as JSON on purpose — its rows are headerless `cells`
+arrays and the column names appear neither in the payload nor the manifest, so a CSV
+conversion would invent meaningless headers.
 
 ### Massachusetts
 ```bash
@@ -253,10 +307,37 @@ Indiana district finance is therefore covered by **Census F-33**.
 
 ### Kansas
 ```bash
+python scripts/ks/assessment.py           # KAP test scores — 11 annual full workbooks
+                                          #   (state + district + BUILDING level) plus the
+                                          #   counts supplement. NOT in Data Central.
+python scripts/ks/normalize_assessment.py # -> assessment_all_years.csv (2.21M rows)
 python scripts/ks/download.py          # KSDE Data Central: 19 reports x state/district/county x
                                        #   years, most already broken out by race/ethnicity
 ```
-`KS_YEARS=2019-2025` and `KS_REPORTS=13,7` narrow the run. There is no JSON API: the page is ASP.NET WebForms and the final submit returns `application/vnd.ms-excel` directly, so the generator *is* the download endpoint. KSDE also serves an incomplete TLS chain, so certificate verification is disabled for that host (public data, no credentials sent).
+KSDE splits its data across two systems, which is easy to miss:
+
+- **Data Central** (`download.py`) holds attendance, graduation, enrollment, discipline, staff and directory — but **no test scores**. There is no JSON API; the page is ASP.NET WebForms and the final submit returns `application/vnd.ms-excel` directly, so the generator *is* the download endpoint. `KS_YEARS=2019-2025` and `KS_REPORTS=13,7` narrow the run; the default spans 2002-2025 because several reports are historical-only.
+- **Building Report Card** (`assessment.py`) holds the assessment data, in two forms:
+  - **Annual full workbooks** — `<YYYY>_<YYYY+1>_Assessment_Full_File.xlsx`, linked from the page as "Download Full Results". These are the complete dataset: state, district **and building** level, every grade, subject and student subgroup, ~300k rows each. 2014-15 to 2024-25 are published (193 MB total).
+  - **`dataService.svc/getPerfChart2016`** — plain JSON, no session or token, `progYear=0` returns a five-year series in one call. Worth pulling as a supplement because it carries **counts** (total tested, students per level) that the workbooks omit — those are percentages only. `KS_ASSESS_FULL` / `KS_ASSESS_API` toggle each half.
+
+  Two traps before you use the workbooks. **Each file is a two-year window** —
+  `2023_2024` holds sheets `2023` *and* `2024`, `2024_2025` holds `2024` and `2025` — so
+  every year but the endpoints appears twice, and the copies differ because KSDE revises.
+  And KSDE reshaped the layout roughly every other year: six schemas across the eleven
+  files, headers renamed, columns reordered, the all-grades aggregate spelled
+  `All Grades`, `ALL` or the bare code `13`.
+
+  `normalize_assessment.py` handles both — it maps every layout onto one schema, then
+  dedupes on (year, org, building, group, grade, subject, population) with the later
+  workbook winning, keeping rows an earlier edition has that the later one dropped.
+  Output `assessment_all_years.csv`: **2,209,296 rows** (from 3,167,169 read — 957,873
+  were window duplicates), 2015-2025 with 2020 absent for COVID. Entity codes are `0`
+  for the state, `D####` for districts and `Z####` for the two Catholic dioceses. One more caveat:
+  2015-16 and 2016-17 carry a `Population` column with both "Accountability" and
+  "Report Card" rows — filter on it or those two years still double-count.
+
+Both hosts serve an incomplete TLS chain, so certificate verification is disabled for them (public data, no credentials sent). Kansas publishes 32 student groups across the assessment workbooks — race, free/reduced lunch, disability, EL, gifted, migrant, mobility, homeless, military, foster care — but **gender only in 2014-15 and 2017-18**; the other eight years omit it, as does the `getPerfChart2016` service (20 groups, no gender). Outside assessment, gender appears in the graduation report.
 
 ### Mississippi / New Mexico / Idaho
 ```bash
@@ -371,7 +452,7 @@ Verified demographic coverage, read from file contents rather than filenames
 | State | files w/ demographics | race | gender | IEP/504 | ELL | FRL |
 |---|---|---|---|---|---|---|
 | Minnesota | 487 / 788 | 420 | 197 | 325 | 345 | 209 |
-| Kansas | 479 / 604 | 371 | 281 | 387 | 220 | 281 |
+| Kansas | 501 / 627 | 393 | 281 | 409 | 242 | 303 |
 | New Mexico | 195 / 233 | 160 | 148 | 124 | 190 | 151 |
 | Indiana | 296 / 330 | 296 | 111 | 223 | 129 | 141 |
 | Missouri | 115 / 252 | 100 | **3** | 70 | 100 | 38 |
@@ -379,7 +460,10 @@ Verified demographic coverage, read from file contents rather than filenames
 | Mississippi | 35 / 178 | 26 | 8 | 24 | 14 | 8 |
 
 Missouri's gender count is not a bug — it publishes almost no gender breakdowns.
-Idaho's and Mississippi's totals are depressed by PDFs, which carry no readable
+Kansas is nearly the same story for assessment: of its 32 student groups only
+2014-15 and 2017-18 break out Males/Females — the other eight years cover race,
+poverty, disability, EL and mobility but not gender, which is otherwise in graduation.
+Idaho's and Mississippi's totals are held down by PDFs, which carry no readable
 columns; Idaho's Report Card API data covers that gap separately.
 
 ## Known Limitations and Gaps
@@ -400,7 +484,23 @@ The recon → classify → script workflow is the same for every new state:
 1. Visit the state DOE website, find the "Data & Reports" or "Downloads" section
 2. Classify: static files / REST API / dashboard?
 3. Adapt the closest existing script (most states are Method 1 or 2)
-4. Check CRDC and Census F-33 as fallbacks for blocked or missing categories
-5. Document sources and gaps in `docs/coverage_matrix.md`
+4. **Check the five categories against what you actually collected**, not against
+   what the portal seemed to offer
+5. Check CRDC and Census F-33 as fallbacks for blocked or missing categories
+6. Document sources and gaps in `docs/coverage_matrix.md`
+
+Step 4 exists because the same mistake cost real data three times: assuming one
+portal is the whole agency.
+
+| State | What was missed | Where it actually was |
+|---|---|---|
+| Minnesota | 828 files / 5.2 GB of disaggregated assessment | A "file lister" page that looked like a blocked dashboard until someone pressed *List files* in a real browser |
+| Indiana | District finance, college-readiness cohorts, SpEd child counts | `in.gov/dlgf` — a **different agency**, plus `/doe/school-operations/` outside the data centre |
+| Kansas | All assessment data | `ksreportcard.ksde.gov`, a second KSDE system; Data Central has none |
+
+Cheap checks that would have caught all three: press every submit button in a real
+browser before concluding a portal is empty, crawl sibling agency domains, and
+count categories per state after collection — a state with zero assessment files
+is a red flag, not a fact.
 
 A config-driven structure for 50-state scale would consolidate shared logic into `scripts/common/` and drive each state from a `config/states.yaml` file specifying URLs, file types, and method.

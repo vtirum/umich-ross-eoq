@@ -1,3 +1,5 @@
+import os
+import re
 import sys
 from pathlib import Path
 
@@ -186,11 +188,17 @@ def _worker(args):
 
 
 def main():
-    manifest = IncrementalManifest(OUT_DIR / "manifest.csv", MANIFEST_FIELDS)
+    manifest = IncrementalManifest(OUT_DIR / "manifest.csv", MANIFEST_FIELDS,
+                                   key=["fiscal_year", "entity_id", "report"])
 
     bootstrap_session = make_session(headers=_API_HEADERS)
     fiscal_years = get_fiscal_years(bootstrap_session)
-    fiscal_years = fiscal_years[-1:] # Only fetch the most recent fiscal year for now
+    # The API serves FY2018-2025. This used to take only the last year, which left six
+    # years unfetched; AZ_RC_YEARS=2019,2020 narrows a run without editing the file.
+    want = os.environ.get("AZ_RC_YEARS", "").strip()
+    if want:
+        keep = {int(y) for y in re.split(r"[,\s]+", want) if y}
+        fiscal_years = [y for y in fiscal_years if int(y) in keep]
     print("Fiscal years:", fiscal_years)
 
     for fiscal_year in fiscal_years:
@@ -228,6 +236,7 @@ def main():
                     task = futures[future]
                     tqdm.tqdm.write(f"Worker failed {task[1].get('nameOfInstitution')} / {task[2]['name']}: {e}")
 
+    manifest.finalize()
     print(f"\nDone. Manifest: {OUT_DIR / 'manifest.csv'}")
 
 

@@ -250,7 +250,8 @@ def main():
             _save_json(static_dir / fname, data)
             print(f"  Saved static: {fname}")
 
-    manifest = IncrementalManifest(OUT_DIR / "manifest.csv", MANIFEST_FIELDS)
+    manifest = IncrementalManifest(OUT_DIR / "manifest.csv", MANIFEST_FIELDS,
+                                   key=["entity_id", "endpoint"])
 
     # ---- State level -------------------------------------------------------
     print("\nFetching state-level data...")
@@ -291,6 +292,7 @@ def main():
             except Exception as e:
                 tqdm.tqdm.write(f"School error: {e}")
 
+    manifest.finalize()
     total = sum(1 for _ in open(OUT_DIR / "manifest.csv")) - 1  # subtract header
     print(f"\nDone. {total} rows written. Manifest: {OUT_DIR / 'manifest.csv'}")
 

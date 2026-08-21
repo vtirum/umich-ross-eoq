@@ -32,7 +32,7 @@ import tqdm
 import requests
 
 from common.http_client import BROWSER_UA, fail_fast_session as make_session
-from common.manifest import write_csv
+from common.manifest import merge_csv
 
 
 REQUEST_TIMEOUT = 20  # fail fast on a throttled/hung connection
@@ -197,7 +197,8 @@ def main():
                              "n_subgroups": len(cats), "n_records": tot, "n_data": tot_data,
                              "local_path": str(out_path), "status": "ok"})
 
-    write_csv(MANIFEST_PATH, manifest, MANIFEST_FIELDS)
+    # merge so a scoped run does not discard other slices already on disk
+    manifest = merge_csv(MANIFEST_PATH, manifest, MANIFEST_FIELDS, "local_path")
     print(f"\nDone. {len(manifest)} report/level files. Manifest: {MANIFEST_PATH}")
 
 
