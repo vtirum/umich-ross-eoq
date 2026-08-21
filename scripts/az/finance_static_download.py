@@ -1,3 +1,16 @@
+"""
+Arizona finance files published as static downloads on azed.gov.
+
+Covers the budget/reporting and LEA-list pages: annual financial reports (SAFR),
+audit reports, LEA directories and assorted per-year finance workbooks. The dynamic
+budget portal is a separate script (finance_dynamic_download.py).
+
+Playwright rather than requests, because several links are handler URLs that only
+resolve with a browser session.
+
+    python scripts/az/finance_static_download.py
+"""
+
 import sys
 from pathlib import Path
 

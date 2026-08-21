@@ -1,3 +1,19 @@
+"""
+Arizona School Report Cards API (azreportcards.azed.gov).
+
+The richest Arizona source: 23 report endpoints per entity, for the state, every
+district and every school, across FY2018-2025. Plain JSON, no auth. Entities come
+from GetEntityList; reports are fetched concurrently and written to
+data/raw/az/reportcards/<year>/<level>/<entity>/<report>.json.
+
+Roughly 71,500 files per year. A third to two thirds of responses are `[]` - the
+endpoint exists but has nothing for that entity - which is expected, and more common
+in the older years.
+
+    python scripts/az/report_cards_reports.py
+    AZ_RC_YEARS=2019,2020 python scripts/az/report_cards_reports.py   # narrow the run
+"""
+
 import os
 import re
 import sys

@@ -1,3 +1,11 @@
+"""
+Filename and hashing helpers shared by every downloader.
+
+`safe_filename` is the important one: portal URLs carry percent-encoding, spaces and
+punctuation that break on some filesystems, and link text is often the only meaningful
+name a file has. `sha256_file` backs the manifests' duplicate detection.
+"""
+
 import hashlib
 import re
 from pathlib import Path

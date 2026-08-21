@@ -1,3 +1,15 @@
+"""
+Manifest writers. Every downloader records what it fetched, from where, and its hash.
+
+Three shapes, because the scripts differ in how they run:
+
+  write_csv            one-shot write at the end of a run
+  merge_csv            merge new rows into an existing manifest on a key, so a run
+                       scoped to part of the data does not erase the rest
+  IncrementalManifest  thread-safe, flushes each row as it lands, for the long
+                       concurrent API pulls where a crash must not lose the record
+"""
+
 import csv
 import threading
 from pathlib import Path

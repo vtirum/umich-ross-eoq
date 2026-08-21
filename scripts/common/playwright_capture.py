@@ -1,3 +1,12 @@
+"""
+Browser plumbing for the portals that will not serve a plain HTTP request.
+
+Some state sites gate downloads behind JavaScript, a session cookie or a bot check.
+These helpers open a configured Chromium context and capture a file two ways: by
+waiting for a real download event, or by reading the response body inline when the
+site renders the file rather than downloading it.
+"""
+
 import os
 import re
 from pathlib import Path

@@ -1,3 +1,13 @@
+"""
+Florida DOE static data pages (fldoe.org).
+
+Crawls the accountability and statistics sections and downloads the spreadsheets and
+PDFs they link. Akamai blocks some direct file requests, so the bulk EDW files come
+via a separate script (fldoe_download.py) that proxies through the Wayback Machine.
+
+    python scripts/fl/scrape.py
+"""
+
 import sys
 from pathlib import Path
 
